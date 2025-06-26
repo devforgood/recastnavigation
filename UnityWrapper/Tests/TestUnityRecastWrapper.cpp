@@ -35,17 +35,15 @@ TEST_CASE("Build NavMesh with simple mesh", "[UnityRecastWrapper]")
 {
     REQUIRE(UnityRecast_Initialize());
     
-    // Create simple plane mesh (2x2 plane)
+    // 메시를 2x2 그리드로 분할 (총 8개 삼각형, 9개 정점)
     std::vector<float> vertices = {
-        -1.0f, 0.0f, -1.0f,  // 0
-         1.0f, 0.0f, -1.0f,  // 1
-         1.0f, 0.0f,  1.0f,  // 2
-        -1.0f, 0.0f,  1.0f   // 3
+        -2.0f, 0.0f, -2.0f,   0.0f, 0.0f, -2.0f,   2.0f, 0.0f, -2.0f,
+        -2.0f, 0.0f,  0.0f,   0.0f, 0.0f,  0.0f,   2.0f, 0.0f,  0.0f,
+        -2.0f, 0.0f,  2.0f,   0.0f, 0.0f,  2.0f,   2.0f, 0.0f,  2.0f
     };
-    
     std::vector<int> indices = {
-        0, 1, 2,  // First triangle
-        0, 2, 3   // Second triangle
+        0,1,3, 1,4,3, 1,2,4, 2,5,4,
+        3,4,6, 4,7,6, 4,5,7, 5,8,7
     };
     
     UnityMeshData meshData;
@@ -55,17 +53,17 @@ TEST_CASE("Build NavMesh with simple mesh", "[UnityRecastWrapper]")
     meshData.indexCount = static_cast<int>(indices.size());
     
     UnityNavMeshBuildSettings settings = {};
-    settings.cellSize = 0.3f;
-    settings.cellHeight = 0.2f;
+    settings.cellSize = 0.2f;
+    settings.cellHeight = 0.1f;
     settings.walkableSlopeAngle = 45.0f;
-    settings.walkableHeight = 2.0f;
-    settings.walkableRadius = 0.6f;
-    settings.walkableClimb = 0.9f;
-    settings.minRegionArea = 8.0f;
-    settings.mergeRegionArea = 20.0f;
+    settings.walkableHeight = 0.2f;
+    settings.walkableRadius = 0.1f;
+    settings.walkableClimb = 0.1f;
+    settings.minRegionArea = 2.0f;
+    settings.mergeRegionArea = 2.0f;
     settings.maxVertsPerPoly = 6;
-    settings.detailSampleDist = 6.0f;
-    settings.detailSampleMaxError = 1.0f;
+    settings.detailSampleDist = 2.0f;
+    settings.detailSampleMaxError = 0.5f;
     
     SECTION("NavMesh build success")
     {
@@ -127,6 +125,9 @@ TEST_CASE("Pathfinding test", "[UnityRecastWrapper]")
     settings.detailSampleMaxError = 1.0f;
     
     UnityNavMeshResult buildResult = UnityRecast_BuildNavMesh(&meshData, &settings);
+    if (!buildResult.success && buildResult.errorMessage) {
+        std::cout << "[NavMesh Build Error] " << buildResult.errorMessage << std::endl;
+    }
     REQUIRE(buildResult.success == true);
     REQUIRE(UnityRecast_LoadNavMesh(buildResult.navMeshData, buildResult.dataSize) == true);
     
@@ -140,7 +141,7 @@ TEST_CASE("Pathfinding test", "[UnityRecastWrapper]")
         std::cout << "  Poly Count: " << polyCount << std::endl;
         std::cout << "  Vertex Count: " << vertexCount << std::endl;
         
-        UnityPathResult pathResult = UnityRecast_FindPath(-0.5f, 0.0f, -0.5f, 0.5f, 0.0f, 0.5f);
+        UnityPathResult pathResult = UnityRecast_FindPath(0.0f, 0.0f, 0.0f, 1.5f, 0.0f, 1.5f);
         
         // 경로 찾기 결과 디버그
         std::cout << "  Path Result:" << std::endl;
@@ -160,22 +161,24 @@ TEST_CASE("Pathfinding test", "[UnityRecastWrapper]")
         
         // First point should be near start point
         float startDist = std::sqrt(
-            std::pow(pathResult.pathPoints[0] - (-0.5f), 2) +
+            std::pow(pathResult.pathPoints[0] - 0.0f, 2) +
             std::pow(pathResult.pathPoints[1] - 0.0f, 2) +
-            std::pow(pathResult.pathPoints[2] - (-0.5f), 2)
+            std::pow(pathResult.pathPoints[2] - 0.0f, 2)
         );
         REQUIRE(startDist < 1.0f);
         
         // Last point should be near end point
         int lastIndex = (pathResult.pointCount - 1) * 3;
         float endDist = std::sqrt(
-            std::pow(pathResult.pathPoints[lastIndex] - 0.5f, 2) +
+            std::pow(pathResult.pathPoints[lastIndex] - 1.5f, 2) +
             std::pow(pathResult.pathPoints[lastIndex + 1] - 0.0f, 2) +
-            std::pow(pathResult.pathPoints[lastIndex + 2] - 0.5f, 2)
+            std::pow(pathResult.pathPoints[lastIndex + 2] - 1.5f, 2)
         );
         REQUIRE(endDist < 1.0f);
         
-        UnityRecast_FreePathResult(&pathResult);
+        if (pathResult.success && pathResult.pathPoints) {
+            UnityRecast_FreePathResult(&pathResult);
+        }
     }
     
     SECTION("Invalid path finding (outside mesh)")
@@ -190,7 +193,9 @@ TEST_CASE("Pathfinding test", "[UnityRecastWrapper]")
             REQUIRE(strlen(pathResult.errorMessage) > 0);
         }
         
-        UnityRecast_FreePathResult(&pathResult);
+        if (pathResult.success && pathResult.pathPoints) {
+            UnityRecast_FreePathResult(&pathResult);
+        }
     }
     
     UnityRecast_FreeNavMeshData(&buildResult);
@@ -304,7 +309,7 @@ TEST_CASE("Memory management test", "[UnityRecastWrapper]")
             REQUIRE(UnityRecast_LoadNavMesh(result.navMeshData, result.dataSize) == true);
             
             // Find a path
-            UnityPathResult pathResult = UnityRecast_FindPath(-0.5f, 0.0f, -0.5f, 0.5f, 0.0f, 0.5f);
+            UnityPathResult pathResult = UnityRecast_FindPath(0.0f, 0.0f, 0.0f, 1.5f, 0.0f, 1.5f);
             if (pathResult.success)
             {
                 UnityRecast_FreePathResult(&pathResult);

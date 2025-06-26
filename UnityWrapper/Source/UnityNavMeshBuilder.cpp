@@ -5,6 +5,7 @@
 #include "DetourNavMeshQuery.h"
 #include <cstring>
 #include <algorithm>
+#include <iostream>
 
 UnityNavMeshBuilder::UnityNavMeshBuilder() {
     m_ctx = std::make_unique<rcContext>();
@@ -32,36 +33,42 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
     try {
         // 빌드 과정 실행
         if (!BuildHeightfield(meshData, settings)) {
+            std::cout << "[BuildNavMesh] BuildHeightfield failed" << std::endl;
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build heightfield");
             return result;
         }
         
         if (!BuildCompactHeightfield(settings)) {
+            std::cout << "[BuildNavMesh] BuildCompactHeightfield failed" << std::endl;
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build compact heightfield");
             return result;
         }
         
         if (!BuildContourSet(settings)) {
+            std::cout << "[BuildNavMesh] BuildContourSet failed" << std::endl;
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build contour set");
             return result;
         }
         
         if (!BuildPolyMesh(settings)) {
+            std::cout << "[BuildNavMesh] BuildPolyMesh failed" << std::endl;
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build poly mesh");
             return result;
         }
         
         if (!BuildDetailMesh(settings)) {
+            std::cout << "[BuildNavMesh] BuildDetailMesh failed" << std::endl;
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build detail mesh");
             return result;
         }
         
         if (!BuildDetourNavMesh(settings)) {
+            std::cout << "[BuildNavMesh] BuildDetourNavMesh failed" << std::endl;
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build detour nav mesh");
             return result;
