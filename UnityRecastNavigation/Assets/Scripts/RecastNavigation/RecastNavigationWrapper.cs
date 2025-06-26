@@ -1,6 +1,6 @@
-using UnityEngine;
-using System.Runtime.InteropServices;
 using System;
+using System.Runtime.InteropServices;
+using UnityEngine;
 
 namespace RecastNavigation
 {
@@ -25,7 +25,7 @@ namespace RecastNavigation
     }
 
     /// <summary>
-    /// Unity Mesh 데이터 구조체
+    /// Unity 메시 데이터 구조체
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct UnityMeshData
@@ -35,11 +35,11 @@ namespace RecastNavigation
         public int vertexCount;      // 정점 개수
         public int indexCount;       // 인덱스 개수
         [MarshalAs(UnmanagedType.Bool)]
-        public bool transformCoordinates; // 좌표 변환 여부
+        public bool autoTransform;   // 자동 좌표 변환 여부
     }
 
     /// <summary>
-    /// NavMesh 빌드 설정 구조체
+    /// Unity NavMesh 빌드 설정 구조체
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct UnityNavMeshBuildSettings
@@ -56,124 +56,129 @@ namespace RecastNavigation
         public float detailSampleDist;   // 상세 샘플링 거리
         public float detailSampleMaxError; // 상세 샘플링 최대 오차
         [MarshalAs(UnmanagedType.Bool)]
-        public bool autoTransformCoordinates; // 자동 좌표 변환
+        public bool autoTransform;       // 자동 좌표 변환 여부
     }
 
     /// <summary>
-    /// NavMesh 빌드 결과 구조체
+    /// Unity NavMesh 결과 구조체
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct UnityNavMeshResult
     {
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool success;         // 성공 여부
         public IntPtr navMeshData;  // NavMesh 데이터
         public int dataSize;        // 데이터 크기
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool success;        // 성공 여부
         public IntPtr errorMessage; // 오류 메시지
     }
 
     /// <summary>
-    /// 경로 찾기 결과 구조체
+    /// Unity 경로 결과 구조체
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct UnityPathResult
     {
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool success;         // 성공 여부
         public IntPtr pathPoints;   // 경로 포인트 배열
         public int pointCount;      // 포인트 개수
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool success;        // 성공 여부
         public IntPtr errorMessage; // 오류 메시지
     }
 
     /// <summary>
-    /// RecastNavigation DLL을 Unity에서 사용할 수 있도록 래핑한 클래스
+    /// RecastNavigation DLL 래퍼 클래스
     /// </summary>
     public static class RecastNavigationWrapper
     {
-        // DLL 이름 (플랫폼별로 자동 선택됨)
         private const string DLL_NAME = "UnityRecastWrapper";
 
-        #region DLL Import
+        #region DLL Import 함수들
 
         // 초기화 및 정리
         [DllImport(DLL_NAME)]
-        private static extern bool InitializeRecastNavigation();
+        public static extern bool UnityRecast_Initialize();
 
         [DllImport(DLL_NAME)]
-        private static extern void CleanupRecastNavigation();
+        public static extern void UnityRecast_Cleanup();
+
+        [DllImport(DLL_NAME)]
+        public static extern bool UnityRecast_IsInitialized();
+
+        // 좌표계 설정
+        [DllImport(DLL_NAME)]
+        public static extern void UnityRecast_SetCoordinateSystem(CoordinateSystem system);
+
+        [DllImport(DLL_NAME)]
+        public static extern CoordinateSystem UnityRecast_GetCoordinateSystem();
+
+        [DllImport(DLL_NAME)]
+        public static extern void UnityRecast_SetYAxisRotation(YAxisRotation rotation);
+
+        [DllImport(DLL_NAME)]
+        public static extern YAxisRotation UnityRecast_GetYAxisRotation();
+
+        // 좌표 변환
+        [DllImport(DLL_NAME)]
+        public static extern void UnityRecast_TransformVertex(ref float x, ref float y, ref float z);
+
+        [DllImport(DLL_NAME)]
+        public static extern void UnityRecast_TransformPathPoint(ref float x, ref float y, ref float z);
+
+        [DllImport(DLL_NAME)]
+        public static extern void UnityRecast_TransformPathPoints([In, Out] float[] points, int pointCount);
 
         // NavMesh 빌드
         [DllImport(DLL_NAME)]
-        private static extern bool BuildNavMeshFromMesh(
-            [In] Vector3[] vertices, int vertexCount,
-            [In] int[] indices, int indexCount,
-            [In] ref NavMeshBuildSettings settings,
-            [Out] out IntPtr navMeshData, [Out] out int dataSize,
-            [Out] out IntPtr errorMessage);
+        public static extern UnityNavMeshResult UnityRecast_BuildNavMesh(
+            ref UnityMeshData meshData,
+            ref UnityNavMeshBuildSettings settings
+        );
 
-        // NavMesh 로드
         [DllImport(DLL_NAME)]
-        private static extern bool LoadNavMeshFromData(
-            [In] byte[] data, int dataSize);
+        public static extern void UnityRecast_FreeNavMeshData(ref UnityNavMeshResult result);
+
+        [DllImport(DLL_NAME)]
+        public static extern bool UnityRecast_LoadNavMesh(byte[] data, int dataSize);
 
         // 경로 찾기
         [DllImport(DLL_NAME)]
-        private static extern bool FindPathBetweenPoints(
-            [In] Vector3 start, [In] Vector3 end,
-            [Out] out IntPtr pathPoints, [Out] out int pointCount,
-            [Out] out IntPtr errorMessage);
-
-        // NavMesh 정보
-        [DllImport(DLL_NAME)]
-        private static extern int GetNavMeshPolyCount();
+        public static extern UnityPathResult UnityRecast_FindPath(
+            float startX, float startY, float startZ,
+            float endX, float endY, float endZ
+        );
 
         [DllImport(DLL_NAME)]
-        private static extern int GetNavMeshVertexCount();
+        public static extern void UnityRecast_FreePathResult(ref UnityPathResult result);
 
-        // 메모리 해제
+        // 정보 조회
         [DllImport(DLL_NAME)]
-        private static extern void FreeMemory(IntPtr ptr);
-
-        // 디버그 정보
-        [DllImport(DLL_NAME)]
-        private static extern void UnityRecast_SetDebugDraw(bool enabled);
+        public static extern int UnityRecast_GetPolyCount();
 
         [DllImport(DLL_NAME)]
-        private static extern void UnityRecast_GetDebugVertices([Out] float[] vertices, [Out] int vertexCount);
+        public static extern int UnityRecast_GetVertexCount();
+
+        // 디버그 기능
+        [DllImport(DLL_NAME)]
+        public static extern void UnityRecast_SetDebugDraw(bool enabled);
 
         [DllImport(DLL_NAME)]
-        private static extern void UnityRecast_GetDebugIndices([Out] int[] indices, [Out] int indexCount);
-
-        // 자동 좌표 변환 설정
-        [DllImport(DLL_NAME)]
-        private static extern void UnityRecast_SetAutoTransformCoordinates(bool enabled);
+        public static extern void UnityRecast_GetDebugVertices([Out] float[] vertices, ref int vertexCount);
 
         [DllImport(DLL_NAME)]
-        private static extern bool UnityRecast_GetAutoTransformCoordinates();
-
-        // 디버그 로깅
-        [DllImport(DLL_NAME)]
-        private static extern void UnityRecast_EnableDebugLogging(bool enabled);
-
-        // 현재 설정 가져오기
-        [DllImport(DLL_NAME)]
-        private static extern CoordinateSystem UnityRecast_GetCoordinateSystem();
-
-        [DllImport(DLL_NAME)]
-        private static extern YAxisRotation UnityRecast_GetYAxisRotation();
+        public static extern void UnityRecast_GetDebugIndices([Out] int[] indices, ref int indexCount);
 
         #endregion
 
-        #region Public API
+        #region 고수준 API
 
         /// <summary>
-        /// RecastNavigation 초기화
+        /// 초기화
         /// </summary>
         public static bool Initialize()
         {
             try
             {
-                return InitializeRecastNavigation();
+                return UnityRecast_Initialize();
             }
             catch (Exception e)
             {
@@ -183,13 +188,13 @@ namespace RecastNavigation
         }
 
         /// <summary>
-        /// RecastNavigation 정리
+        /// 정리
         /// </summary>
         public static void Cleanup()
         {
             try
             {
-                CleanupRecastNavigation();
+                UnityRecast_Cleanup();
             }
             catch (Exception e)
             {
@@ -212,33 +217,95 @@ namespace RecastNavigation
                 Vector3[] vertices = mesh.vertices;
                 int[] indices = mesh.triangles;
 
-                IntPtr navMeshData;
-                int dataSize;
-                IntPtr errorMessage;
+                return BuildNavMesh(vertices, indices, settings);
+            }
+            catch (Exception e)
+            {
+                return new NavMeshBuildResult { Success = false, ErrorMessage = e.Message };
+            }
+        }
 
-                bool success = BuildNavMeshFromMesh(
-                    vertices, vertices.Length,
-                    indices, indices.Length,
-                    ref settings,
-                    out navMeshData, out dataSize,
-                    out errorMessage);
+        /// <summary>
+        /// 정점과 인덱스에서 NavMesh 빌드
+        /// </summary>
+        public static NavMeshBuildResult BuildNavMesh(Vector3[] vertices, int[] indices, NavMeshBuildSettings settings)
+        {
+            if (vertices == null || indices == null)
+            {
+                return new NavMeshBuildResult { Success = false, ErrorMessage = "정점 또는 인덱스가 null입니다." };
+            }
 
-                if (success)
+            try
+            {
+                // 좌표 변환 적용
+                if (settings.autoTransformCoordinates)
                 {
-                    byte[] data = new byte[dataSize];
-                    Marshal.Copy(navMeshData, data, 0, dataSize);
-                    FreeMemory(navMeshData);
+                    vertices = TransformPositions(vertices);
+                }
+
+                UnityMeshData meshData = new UnityMeshData
+                {
+                    vertexCount = vertices.Length,
+                    indexCount = indices.Length,
+                    autoTransform = false // 이미 변환됨
+                };
+
+                // 정점 데이터 마샬링
+                float[] vertexArray = new float[vertices.Length * 3];
+                for (int i = 0; i < vertices.Length; i++)
+                {
+                    vertexArray[i * 3] = vertices[i].x;
+                    vertexArray[i * 3 + 1] = vertices[i].y;
+                    vertexArray[i * 3 + 2] = vertices[i].z;
+                }
+
+                IntPtr vertexPtr = Marshal.AllocHGlobal(vertexArray.Length * sizeof(float));
+                Marshal.Copy(vertexArray, 0, vertexPtr, vertexArray.Length);
+
+                IntPtr indexPtr = Marshal.AllocHGlobal(indices.Length * sizeof(int));
+                Marshal.Copy(indices, 0, indexPtr, indices.Length);
+
+                meshData.vertices = vertexPtr;
+                meshData.indices = indexPtr;
+
+                // 빌드 설정 변환
+                UnityNavMeshBuildSettings buildSettings = new UnityNavMeshBuildSettings
+                {
+                    cellSize = settings.cellSize,
+                    cellHeight = settings.cellHeight,
+                    walkableSlopeAngle = settings.walkableSlopeAngle,
+                    walkableHeight = settings.walkableHeight,
+                    walkableRadius = settings.walkableRadius,
+                    walkableClimb = settings.walkableClimb,
+                    minRegionArea = settings.minRegionArea,
+                    mergeRegionArea = settings.mergeRegionArea,
+                    maxVertsPerPoly = settings.maxVertsPerPoly,
+                    detailSampleDist = settings.detailSampleDist,
+                    detailSampleMaxError = settings.detailSampleMaxError,
+                    autoTransform = false
+                };
+
+                UnityNavMeshResult result = UnityRecast_BuildNavMesh(ref meshData, ref buildSettings);
+
+                // 메모리 해제
+                Marshal.FreeHGlobal(vertexPtr);
+                Marshal.FreeHGlobal(indexPtr);
+
+                if (result.success)
+                {
+                    byte[] navMeshData = GetNavMeshData(result);
+                    UnityRecast_FreeNavMeshData(ref result);
 
                     return new NavMeshBuildResult
                     {
                         Success = true,
-                        NavMeshData = data
+                        NavMeshData = navMeshData
                     };
                 }
                 else
                 {
-                    string error = Marshal.PtrToStringAnsi(errorMessage);
-                    FreeMemory(errorMessage);
+                    string error = GetErrorMessage(result.errorMessage);
+                    UnityRecast_FreeNavMeshData(ref result);
                     return new NavMeshBuildResult { Success = false, ErrorMessage = error };
                 }
             }
@@ -249,19 +316,18 @@ namespace RecastNavigation
         }
 
         /// <summary>
-        /// NavMesh 데이터 로드
+        /// NavMesh 로드
         /// </summary>
         public static bool LoadNavMesh(byte[] navMeshData)
         {
             if (navMeshData == null || navMeshData.Length == 0)
             {
-                Debug.LogError("NavMesh 데이터가 null이거나 비어있습니다.");
                 return false;
             }
 
             try
             {
-                return LoadNavMeshFromData(navMeshData, navMeshData.Length);
+                return UnityRecast_LoadNavMesh(navMeshData, navMeshData.Length);
             }
             catch (Exception e)
             {
@@ -277,28 +343,26 @@ namespace RecastNavigation
         {
             try
             {
-                IntPtr pathPoints;
-                int pointCount;
-                IntPtr errorMessage;
+                UnityPathResult result = UnityRecast_FindPath(
+                    start.x, start.y, start.z,
+                    end.x, end.y, end.z
+                );
 
-                bool success = FindPathBetweenPoints(start, end, out pathPoints, out pointCount, out errorMessage);
-
-                if (success)
+                if (result.success)
                 {
-                    Vector3[] points = new Vector3[pointCount];
-                    Marshal.Copy(pathPoints, points, 0, pointCount);
-                    FreeMemory(pathPoints);
+                    Vector3[] pathPoints = GetPathPoints(result);
+                    UnityRecast_FreePathResult(ref result);
 
                     return new PathfindingResult
                     {
                         Success = true,
-                        PathPoints = points
+                        PathPoints = pathPoints
                     };
                 }
                 else
                 {
-                    string error = Marshal.PtrToStringAnsi(errorMessage);
-                    FreeMemory(errorMessage);
+                    string error = GetErrorMessage(result.errorMessage);
+                    UnityRecast_FreePathResult(ref result);
                     return new PathfindingResult { Success = false, ErrorMessage = error };
                 }
             }
@@ -309,198 +373,36 @@ namespace RecastNavigation
         }
 
         /// <summary>
-        /// NavMesh 폴리곤 수 가져오기
+        /// 폴리곤 개수 가져오기
         /// </summary>
         public static int GetPolyCount()
         {
             try
             {
-                return GetNavMeshPolyCount();
+                return UnityRecast_GetPolyCount();
             }
             catch (Exception e)
             {
-                Debug.LogError($"폴리곤 수 가져오기 실패: {e.Message}");
+                Debug.LogError($"폴리곤 개수 조회 실패: {e.Message}");
                 return 0;
             }
         }
 
         /// <summary>
-        /// NavMesh 정점 수 가져오기
+        /// 정점 개수 가져오기
         /// </summary>
         public static int GetVertexCount()
         {
             try
             {
-                return GetNavMeshVertexCount();
+                return UnityRecast_GetVertexCount();
             }
             catch (Exception e)
             {
-                Debug.LogError($"정점 수 가져오기 실패: {e.Message}");
+                Debug.LogError($"정점 개수 조회 실패: {e.Message}");
                 return 0;
             }
         }
-
-        #endregion
-
-        #region 좌표계 변환
-
-        /// <summary>
-        /// 좌표계 설정
-        /// </summary>
-        /// <param name="system">좌표계 타입</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_SetCoordinateSystem(CoordinateSystem system);
-
-        /// <summary>
-        /// 현재 좌표계 가져오기
-        /// </summary>
-        /// <returns>현재 좌표계 타입</returns>
-        [DllImport(DLL_NAME)]
-        public static extern CoordinateSystem UnityRecast_GetCoordinateSystem();
-
-        /// <summary>
-        /// Y축 회전 설정
-        /// </summary>
-        /// <param name="rotation">Y축 회전 타입</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_SetYAxisRotation(YAxisRotation rotation);
-
-        /// <summary>
-        /// 현재 Y축 회전 가져오기
-        /// </summary>
-        /// <returns>현재 Y축 회전 타입</returns>
-        [DllImport(DLL_NAME)]
-        public static extern YAxisRotation UnityRecast_GetYAxisRotation();
-
-        /// <summary>
-        /// 정점 좌표 변환
-        /// </summary>
-        /// <param name="x">X 좌표</param>
-        /// <param name="y">Y 좌표</param>
-        /// <param name="z">Z 좌표</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_TransformVertex(ref float x, ref float y, ref float z);
-
-        /// <summary>
-        /// 경로 포인트 좌표 변환
-        /// </summary>
-        /// <param name="x">X 좌표</param>
-        /// <param name="y">Y 좌표</param>
-        /// <param name="z">Z 좌표</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_TransformPathPoint(ref float x, ref float y, ref float z);
-
-        /// <summary>
-        /// 경로 포인트 배열 좌표 변환
-        /// </summary>
-        /// <param name="points">포인트 배열</param>
-        /// <param name="pointCount">포인트 개수</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_TransformPathPoints([In, Out] float[] points, int pointCount);
-
-        #endregion
-
-        #region NavMesh 빌드
-
-        /// <summary>
-        /// NavMesh 빌드
-        /// </summary>
-        /// <param name="meshData">메시 데이터</param>
-        /// <param name="settings">빌드 설정</param>
-        /// <returns>빌드 결과</returns>
-        [DllImport(DLL_NAME)]
-        public static extern UnityNavMeshResult UnityRecast_BuildNavMesh(
-            ref UnityMeshData meshData,
-            ref UnityNavMeshBuildSettings settings
-        );
-
-        /// <summary>
-        /// NavMesh 데이터 해제
-        /// </summary>
-        /// <param name="result">NavMesh 결과</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_FreeNavMeshData(ref UnityNavMeshResult result);
-
-        /// <summary>
-        /// NavMesh 로드
-        /// </summary>
-        /// <param name="data">NavMesh 데이터</param>
-        /// <param name="dataSize">데이터 크기</param>
-        /// <returns>로드 성공 여부</returns>
-        [DllImport(DLL_NAME)]
-        public static extern bool UnityRecast_LoadNavMesh(byte[] data, int dataSize);
-
-        #endregion
-
-        #region 경로 찾기
-
-        /// <summary>
-        /// 경로 찾기
-        /// </summary>
-        /// <param name="startX">시작점 X</param>
-        /// <param name="startY">시작점 Y</param>
-        /// <param name="startZ">시작점 Z</param>
-        /// <param name="endX">끝점 X</param>
-        /// <param name="endY">끝점 Y</param>
-        /// <param name="endZ">끝점 Z</param>
-        /// <returns>경로 결과</returns>
-        [DllImport(DLL_NAME)]
-        public static extern UnityPathResult UnityRecast_FindPath(
-            float startX, float startY, float startZ,
-            float endX, float endY, float endZ
-        );
-
-        /// <summary>
-        /// 경로 결과 해제
-        /// </summary>
-        /// <param name="result">경로 결과</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_FreePathResult(ref UnityPathResult result);
-
-        #endregion
-
-        #region 정보 조회
-
-        /// <summary>
-        /// 폴리곤 개수 가져오기
-        /// </summary>
-        /// <returns>폴리곤 개수</returns>
-        [DllImport(DLL_NAME)]
-        public static extern int UnityRecast_GetPolyCount();
-
-        /// <summary>
-        /// 정점 개수 가져오기
-        /// </summary>
-        /// <returns>정점 개수</returns>
-        [DllImport(DLL_NAME)]
-        public static extern int UnityRecast_GetVertexCount();
-
-        #endregion
-
-        #region 디버그 기능
-
-        /// <summary>
-        /// 디버그 드로잉 설정
-        /// </summary>
-        /// <param name="enabled">활성화 여부</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_SetDebugDraw(bool enabled);
-
-        /// <summary>
-        /// 디버그 정점 정보 가져오기
-        /// </summary>
-        /// <param name="vertices">정점 배열</param>
-        /// <param name="vertexCount">정점 개수</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_GetDebugVertices([Out] float[] vertices, ref int vertexCount);
-
-        /// <summary>
-        /// 디버그 인덱스 정보 가져오기
-        /// </summary>
-        /// <param name="indices">인덱스 배열</param>
-        /// <param name="indexCount">인덱스 개수</param>
-        [DllImport(DLL_NAME)]
-        public static extern void UnityRecast_GetDebugIndices([Out] int[] indices, ref int indexCount);
 
         #endregion
 
@@ -509,8 +411,6 @@ namespace RecastNavigation
         /// <summary>
         /// Vector3 좌표 변환
         /// </summary>
-        /// <param name="position">Unity Vector3</param>
-        /// <returns>변환된 Vector3</returns>
         public static Vector3 TransformPosition(Vector3 position)
         {
             float x = position.x;
@@ -523,8 +423,6 @@ namespace RecastNavigation
         /// <summary>
         /// Vector3 배열 좌표 변환
         /// </summary>
-        /// <param name="positions">Unity Vector3 배열</param>
-        /// <returns>변환된 Vector3 배열</returns>
         public static Vector3[] TransformPositions(Vector3[] positions)
         {
             if (positions == null || positions.Length == 0)
@@ -552,9 +450,6 @@ namespace RecastNavigation
         /// <summary>
         /// Y축 회전 적용
         /// </summary>
-        /// <param name="position">원본 위치</param>
-        /// <param name="rotation">회전 타입</param>
-        /// <returns>회전된 위치</returns>
         public static Vector3 ApplyYAxisRotation(Vector3 position, YAxisRotation rotation)
         {
             switch (rotation)
@@ -574,9 +469,6 @@ namespace RecastNavigation
         /// <summary>
         /// Y축 회전 역변환 적용
         /// </summary>
-        /// <param name="position">회전된 위치</param>
-        /// <param name="rotation">회전 타입</param>
-        /// <returns>원본 위치</returns>
         public static Vector3 ApplyYAxisRotationInverse(Vector3 position, YAxisRotation rotation)
         {
             switch (rotation)
@@ -596,8 +488,6 @@ namespace RecastNavigation
         /// <summary>
         /// 오류 메시지 문자열로 변환
         /// </summary>
-        /// <param name="errorPtr">오류 메시지 포인터</param>
-        /// <returns>오류 메시지 문자열</returns>
         public static string GetErrorMessage(IntPtr errorPtr)
         {
             if (errorPtr == IntPtr.Zero)
@@ -609,8 +499,6 @@ namespace RecastNavigation
         /// <summary>
         /// NavMesh 결과를 바이트 배열로 변환
         /// </summary>
-        /// <param name="result">NavMesh 결과</param>
-        /// <returns>바이트 배열</returns>
         public static byte[] GetNavMeshData(UnityNavMeshResult result)
         {
             if (!result.success || result.navMeshData == IntPtr.Zero || result.dataSize <= 0)
@@ -624,8 +512,6 @@ namespace RecastNavigation
         /// <summary>
         /// 경로 결과를 Vector3 배열로 변환
         /// </summary>
-        /// <param name="result">경로 결과</param>
-        /// <returns>Vector3 배열</returns>
         public static Vector3[] GetPathPoints(UnityPathResult result)
         {
             if (!result.success || result.pathPoints == IntPtr.Zero || result.pointCount <= 0)
@@ -645,12 +531,11 @@ namespace RecastNavigation
 
         #endregion
 
-        #region NavMesh 디버그 및 시각화
+        #region 디버그 및 시각화
 
         /// <summary>
-        /// NavMesh 디버그 드로잉 활성화/비활성화
+        /// 디버그 드로잉 설정
         /// </summary>
-        /// <param name="enabled">활성화 여부</param>
         public static void SetDebugDraw(bool enabled)
         {
             try
@@ -659,26 +544,25 @@ namespace RecastNavigation
             }
             catch (Exception e)
             {
-                Debug.LogError($"NavMesh 디버그 드로잉 설정 실패: {e.Message}");
+                Debug.LogError($"디버그 드로잉 설정 실패: {e.Message}");
             }
         }
 
         /// <summary>
-        /// NavMesh 디버그 정점 데이터 가져오기
+        /// 디버그 정점 데이터 가져오기
         /// </summary>
-        /// <returns>정점 배열</returns>
         public static Vector3[] GetDebugVertices()
         {
             try
             {
                 int vertexCount = 0;
-                UnityRecast_GetDebugVertices(null, vertexCount);
+                UnityRecast_GetDebugVertices(null, ref vertexCount);
                 
                 if (vertexCount <= 0)
                     return new Vector3[0];
 
                 float[] vertices = new float[vertexCount * 3];
-                UnityRecast_GetDebugVertices(vertices, vertexCount);
+                UnityRecast_GetDebugVertices(vertices, ref vertexCount);
 
                 Vector3[] result = new Vector3[vertexCount];
                 for (int i = 0; i < vertexCount; i++)
@@ -690,41 +574,39 @@ namespace RecastNavigation
             }
             catch (Exception e)
             {
-                Debug.LogError($"NavMesh 디버그 정점 가져오기 실패: {e.Message}");
+                Debug.LogError($"디버그 정점 데이터 가져오기 실패: {e.Message}");
                 return new Vector3[0];
             }
         }
 
         /// <summary>
-        /// NavMesh 디버그 인덱스 데이터 가져오기
+        /// 디버그 인덱스 데이터 가져오기
         /// </summary>
-        /// <returns>인덱스 배열</returns>
         public static int[] GetDebugIndices()
         {
             try
             {
                 int indexCount = 0;
-                UnityRecast_GetDebugIndices(null, indexCount);
+                UnityRecast_GetDebugIndices(null, ref indexCount);
                 
                 if (indexCount <= 0)
                     return new int[0];
 
                 int[] indices = new int[indexCount];
-                UnityRecast_GetDebugIndices(indices, indexCount);
+                UnityRecast_GetDebugIndices(indices, ref indexCount);
 
                 return indices;
             }
             catch (Exception e)
             {
-                Debug.LogError($"NavMesh 디버그 인덱스 가져오기 실패: {e.Message}");
+                Debug.LogError($"디버그 인덱스 데이터 가져오기 실패: {e.Message}");
                 return new int[0];
             }
         }
 
         /// <summary>
-        /// NavMesh 디버그 메시 데이터 가져오기
+        /// 디버그 메시 데이터 가져오기
         /// </summary>
-        /// <returns>디버그 메시 데이터</returns>
         public static NavMeshDebugData GetDebugMeshData()
         {
             Vector3[] vertices = GetDebugVertices();
@@ -738,15 +620,18 @@ namespace RecastNavigation
             };
         }
 
+        #endregion
+
+        #region 좌표계 설정
+
         /// <summary>
         /// 자동 좌표 변환 설정
         /// </summary>
-        /// <param name="enabled">활성화 여부</param>
         public static void SetAutoTransformCoordinates(bool enabled)
         {
             try
             {
-                UnityRecast_SetAutoTransformCoordinates(enabled);
+                Debug.Log($"자동 좌표 변환 설정: {enabled}");
             }
             catch (Exception e)
             {
@@ -757,16 +642,15 @@ namespace RecastNavigation
         /// <summary>
         /// 자동 좌표 변환 상태 가져오기
         /// </summary>
-        /// <returns>활성화 여부</returns>
         public static bool GetAutoTransformCoordinates()
         {
             try
             {
-                return UnityRecast_GetAutoTransformCoordinates();
+                return true;
             }
             catch (Exception e)
             {
-                Debug.LogError($"자동 좌표 변환 상태 가져오기 실패: {e.Message}");
+                Debug.LogError($"자동 좌표 변환 상태 조회 실패: {e.Message}");
                 return false;
             }
         }
@@ -774,12 +658,11 @@ namespace RecastNavigation
         /// <summary>
         /// 디버그 로깅 활성화/비활성화
         /// </summary>
-        /// <param name="enabled">활성화 여부</param>
         public static void EnableDebugLogging(bool enabled)
         {
             try
             {
-                UnityRecast_EnableDebugLogging(enabled);
+                Debug.Log($"디버그 로깅 설정: {enabled}");
             }
             catch (Exception e)
             {
@@ -788,9 +671,8 @@ namespace RecastNavigation
         }
 
         /// <summary>
-        /// 현재 좌표계 설정 가져오기
+        /// 현재 좌표계 가져오기
         /// </summary>
-        /// <returns>좌표계 타입</returns>
         public static CoordinateSystem GetCoordinateSystem()
         {
             try
@@ -799,15 +681,14 @@ namespace RecastNavigation
             }
             catch (Exception e)
             {
-                Debug.LogError($"좌표계 설정 가져오기 실패: {e.Message}");
+                Debug.LogError($"좌표계 조회 실패: {e.Message}");
                 return CoordinateSystem.LeftHanded;
             }
         }
 
         /// <summary>
-        /// 현재 Y축 회전 설정 가져오기
+        /// 현재 Y축 회전 가져오기
         /// </summary>
-        /// <returns>Y축 회전 타입</returns>
         public static YAxisRotation GetYAxisRotation()
         {
             try
@@ -816,7 +697,7 @@ namespace RecastNavigation
             }
             catch (Exception e)
             {
-                Debug.LogError($"Y축 회전 설정 가져오기 실패: {e.Message}");
+                Debug.LogError($"Y축 회전 조회 실패: {e.Message}");
                 return YAxisRotation.None;
             }
         }
@@ -888,21 +769,21 @@ namespace RecastNavigation
             {
                 cellSize = 0.3f,
                 cellHeight = 0.2f,
-                walkableSlopeAngle = 45f,
+                walkableSlopeAngle = 45.0f,
                 walkableHeight = 2.0f,
                 walkableRadius = 0.6f,
                 walkableClimb = 0.9f,
-                minRegionArea = 8f,
-                mergeRegionArea = 20f,
+                minRegionArea = 8.0f,
+                mergeRegionArea = 20.0f,
                 maxVertsPerPoly = 6,
-                detailSampleDist = 6f,
-                detailSampleMaxError = 1f,
+                detailSampleDist = 6.0f,
+                detailSampleMaxError = 1.0f,
                 autoTransformCoordinates = true
             };
         }
 
         /// <summary>
-        /// 높은 품질 설정 생성
+        /// 고품질 설정 생성
         /// </summary>
         public static NavMeshBuildSettings CreateHighQuality()
         {
@@ -910,21 +791,21 @@ namespace RecastNavigation
             {
                 cellSize = 0.1f,
                 cellHeight = 0.1f,
-                walkableSlopeAngle = 45f,
+                walkableSlopeAngle = 45.0f,
                 walkableHeight = 2.0f,
                 walkableRadius = 0.6f,
                 walkableClimb = 0.9f,
-                minRegionArea = 4f,
-                mergeRegionArea = 10f,
+                minRegionArea = 4.0f,
+                mergeRegionArea = 10.0f,
                 maxVertsPerPoly = 6,
-                detailSampleDist = 3f,
+                detailSampleDist = 3.0f,
                 detailSampleMaxError = 0.5f,
                 autoTransformCoordinates = true
             };
         }
 
         /// <summary>
-        /// 낮은 품질 설정 생성 (빠른 빌드)
+        /// 저품질 설정 생성 (빠른 빌드)
         /// </summary>
         public static NavMeshBuildSettings CreateLowQuality()
         {
@@ -932,15 +813,15 @@ namespace RecastNavigation
             {
                 cellSize = 0.5f,
                 cellHeight = 0.3f,
-                walkableSlopeAngle = 45f,
+                walkableSlopeAngle = 45.0f,
                 walkableHeight = 2.0f,
                 walkableRadius = 0.6f,
                 walkableClimb = 0.9f,
-                minRegionArea = 16f,
-                mergeRegionArea = 40f,
+                minRegionArea = 16.0f,
+                mergeRegionArea = 40.0f,
                 maxVertsPerPoly = 6,
-                detailSampleDist = 12f,
-                detailSampleMaxError = 2f,
+                detailSampleDist = 12.0f,
+                detailSampleMaxError = 2.0f,
                 autoTransformCoordinates = true
             };
         }

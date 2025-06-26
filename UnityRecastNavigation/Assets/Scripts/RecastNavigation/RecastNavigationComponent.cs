@@ -9,7 +9,7 @@ namespace RecastNavigation
     public class RecastNavigationComponent : MonoBehaviour
     {
         [Header("NavMesh 설정")]
-        [SerializeField] private NavMeshBuildSettings buildSettings = NavMeshBuildSettings.CreateDefault();
+        [SerializeField] private NavMeshBuildSettings buildSettings = NavMeshBuildSettingsExtensions.CreateDefault();
         [SerializeField] private bool autoTransformCoordinates = true;
         [SerializeField] private CoordinateSystem coordinateSystem = CoordinateSystem.LeftHanded;
         [SerializeField] private YAxisRotation yAxisRotation = YAxisRotation.None;
@@ -39,7 +39,9 @@ namespace RecastNavigation
 
         // 프로퍼티
         public bool IsInitialized => isInitialized;
+        public bool IsNavMeshLoaded => navMeshData != null && navMeshData.Length > 0;
         public Vector3[] CurrentPath => currentPath.ToArray();
+        public int PathLength => currentPath.Count;
         public int PolyCount => isInitialized ? RecastNavigationWrapper.UnityRecast_GetPolyCount() : 0;
         public int VertexCount => isInitialized ? RecastNavigationWrapper.UnityRecast_GetVertexCount() : 0;
 
@@ -63,7 +65,7 @@ namespace RecastNavigation
             // 자동 경로 찾기
             if (autoFindPath && startPoint != null && endPoint != null)
             {
-                if (Time.time % pathUpdateInterval < Time.deltaTime)
+                if (Time.frameCount % Mathf.Max(1, Mathf.RoundToInt(pathUpdateInterval / Time.deltaTime)) == 0)
                 {
                     FindPath(startPoint.position, endPoint.position);
                 }
@@ -80,14 +82,32 @@ namespace RecastNavigation
             if (!showDebugInfo) return;
 
             // NavMesh 그리기
-            if (drawNavMesh && navMeshData != null)
+            if (drawNavMesh && isInitialized)
             {
                 Gizmos.color = navMeshColor;
-                // TODO: NavMesh 폴리곤 그리기 구현
+                Vector3[] vertices = RecastNavigationWrapper.GetDebugVertices();
+                int[] indices = RecastNavigationWrapper.GetDebugIndices();
+
+                if (vertices != null && indices != null)
+                {
+                    for (int i = 0; i < indices.Length; i += 3)
+                    {
+                        if (i + 2 < indices.Length)
+                        {
+                            Vector3 v1 = vertices[indices[i]];
+                            Vector3 v2 = vertices[indices[i + 1]];
+                            Vector3 v3 = vertices[indices[i + 2]];
+
+                            Gizmos.DrawLine(v1, v2);
+                            Gizmos.DrawLine(v2, v3);
+                            Gizmos.DrawLine(v3, v1);
+                        }
+                    }
+                }
             }
 
             // 경로 그리기
-            if (drawPath && currentPath.Count > 0)
+            if (drawPath && currentPath.Count > 1)
             {
                 Gizmos.color = pathColor;
                 for (int i = 1; i < currentPath.Count; i++)
@@ -126,7 +146,7 @@ namespace RecastNavigation
 
             if (currentPath.Count > 0)
             {
-                GUILayout.Label($"경로 포인트 수: {currentPath.Count}");
+                GUILayout.Label($"경로 포인트 수: {PathLength}");
             }
 
             GUILayout.EndVertical();
@@ -662,14 +682,6 @@ namespace RecastNavigation
         public byte[] GetNavMeshData()
         {
             return navMeshData;
-        }
-
-        /// <summary>
-        /// 초기화 상태 확인
-        /// </summary>
-        public bool IsInitialized()
-        {
-            return isInitialized;
         }
 
         #endregion

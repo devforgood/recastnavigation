@@ -1,155 +1,148 @@
-using UnityEngine;
-using RecastNavigation;
 using System.Collections;
+using UnityEngine;
 
 namespace RecastNavigation
 {
     /// <summary>
-    /// RecastNavigation 사용 예제 스크립트
+    /// RecastNavigation 사용 예제
     /// </summary>
     public class RecastNavigationSample : MonoBehaviour
     {
         [Header("NavMesh 설정")]
-        [SerializeField] private NavMeshBuildSettings buildSettings;
-        
-        [Header("경로 찾기 설정")]
         [SerializeField] private Transform agent;
+        [SerializeField] private bool autoBuildNavMesh = true;
+
+        [Header("경로 찾기 설정")]
         [SerializeField] private Transform target;
         [SerializeField] private bool autoFindPath = true;
         [SerializeField] private float pathUpdateInterval = 0.5f;
-        
+
         [Header("시각화")]
-        [SerializeField] private bool showPath = true;
+        [SerializeField] private bool drawPath = true;
         [SerializeField] private Color pathColor = Color.green;
-        [SerializeField] private float pathWidth = 0.1f;
         [SerializeField] private bool showDebugInfo = true;
-        
+
         [Header("에이전트 이동")]
         [SerializeField] private bool moveAgent = true;
         [SerializeField] private float moveSpeed = 5f;
         [SerializeField] private float rotationSpeed = 180f;
         [SerializeField] private float arrivalDistance = 0.5f;
-        
-        // 내부 상태
+
+        // 내부 변수
         private RecastNavigationComponent navComponent;
         private Vector3[] currentPath;
         private int currentPathIndex = 0;
         private bool isMoving = false;
-        
+
         // 이벤트
         public System.Action<Vector3[]> OnPathFound;
         public System.Action OnDestinationReached;
         public System.Action<string> OnError;
-        
+
         void Start()
         {
-            // RecastNavigation 컴포넌트 가져오기 또는 생성
+            // RecastNavigation 컴포넌트 찾기 또는 추가
             navComponent = FindObjectOfType<RecastNavigationComponent>();
             if (navComponent == null)
             {
-                GameObject navObject = new GameObject("RecastNavigation");
-                navComponent = navObject.AddComponent<RecastNavigationComponent>();
+                navComponent = gameObject.AddComponent<RecastNavigationComponent>();
+                Debug.Log("RecastNavigationComponent가 자동으로 추가되었습니다.");
             }
-            
-            // 기본 설정 초기화
-            if (buildSettings.Equals(default(NavMeshBuildSettings)))
-            {
-                buildSettings = NavMeshBuildSettingsExtensions.CreateDefault();
-            }
-            
-            // 이벤트 구독
+
+            // 이벤트 연결
             navComponent.OnPathFound += OnPathFoundCallback;
             navComponent.OnError += OnErrorCallback;
-            
-            // NavMesh 빌드
-            StartCoroutine(BuildNavMeshCoroutine());
+
+            // 자동 NavMesh 빌드
+            if (autoBuildNavMesh)
+            {
+                StartCoroutine(BuildNavMeshCoroutine());
+            }
         }
-        
+
         void Update()
         {
-            if (!navComponent.IsNavMeshLoaded) return;
-            
             // 자동 경로 찾기
-            if (autoFindPath && agent != null && target != null)
+            if (autoFindPath && navComponent.IsNavMeshLoaded && agent != null && target != null)
             {
-                if (Time.frameCount % Mathf.RoundToInt(pathUpdateInterval * 60) == 0)
+                if (Time.frameCount % Mathf.Max(1, Mathf.RoundToInt(pathUpdateInterval / Time.deltaTime)) == 0)
                 {
                     FindPathToTarget();
                 }
             }
-            
+
             // 에이전트 이동
-            if (moveAgent && isMoving && currentPath != null && currentPathIndex < currentPath.Length)
+            if (isMoving && moveAgent)
             {
                 MoveAgentAlongPath();
             }
         }
-        
+
         void OnDestroy()
         {
-            // 이벤트 구독 해제
+            // 이벤트 연결 해제
             if (navComponent != null)
             {
                 navComponent.OnPathFound -= OnPathFoundCallback;
                 navComponent.OnError -= OnErrorCallback;
             }
         }
-        
+
         void OnDrawGizmos()
         {
-            if (!showPath || currentPath == null) return;
-            
-            // 경로 표시
+            if (!drawPath || currentPath == null || currentPath.Length < 2)
+                return;
+
+            // 경로 그리기
             Gizmos.color = pathColor;
             for (int i = 1; i < currentPath.Length; i++)
             {
                 Gizmos.DrawLine(currentPath[i - 1], currentPath[i]);
             }
-            
-            // 경로 포인트 표시
-            Gizmos.color = Color.yellow;
-            for (int i = 0; i < currentPath.Length; i++)
+
+            // 현재 위치와 목표 지점 표시
+            if (agent != null)
             {
-                Gizmos.DrawWireSphere(currentPath[i], 0.1f);
+                Gizmos.color = Color.blue;
+                Gizmos.DrawWireSphere(agent.position, 0.5f);
             }
-            
-            // 현재 목표 지점 표시
-            if (currentPathIndex < currentPath.Length)
+
+            if (target != null)
             {
                 Gizmos.color = Color.red;
-                Gizmos.DrawWireSphere(currentPath[currentPathIndex], 0.2f);
+                Gizmos.DrawWireSphere(target.position, 0.5f);
             }
         }
-        
+
         void OnGUI()
         {
             if (!showDebugInfo) return;
-            
-            // 화면에 디버그 정보 표시
+
             GUILayout.BeginArea(new Rect(10, 10, 300, 250));
             GUILayout.BeginVertical("box");
-            
-            GUILayout.Label("RecastNavigation Sample", EditorGUIUtility.isProSkin ? GUI.skin.label : GUI.skin.box);
-            GUILayout.Label($"NavMesh 로드됨: {navComponent?.IsNavMeshLoaded}");
-            GUILayout.Label($"폴리곤 수: {navComponent?.PolyCount}");
-            GUILayout.Label($"정점 수: {navComponent?.VertexCount}");
-            
+
+            GUILayout.Label("RecastNavigation 샘플", GUI.skin.label);
+            GUILayout.Space(5);
+
+            GUILayout.Label($"NavMesh 로드: {(navComponent.IsNavMeshLoaded ? "완료" : "미완료")}");
+            GUILayout.Label($"폴리곤 수: {navComponent.PolyCount}");
+            GUILayout.Label($"정점 수: {navComponent.VertexCount}");
+            GUILayout.Label($"경로 길이: {navComponent.PathLength}");
+
             if (currentPath != null)
             {
-                GUILayout.Label($"경로 길이: {navComponent?.PathLength:F2}");
-                GUILayout.Label($"경로 포인트 수: {currentPath.Length}");
+                GUILayout.Label($"현재 경로: {currentPath.Length}개 포인트");
                 GUILayout.Label($"현재 인덱스: {currentPathIndex}");
-                GUILayout.Label($"이동 중: {isMoving}");
+                GUILayout.Label($"이동 중: {(isMoving ? "예" : "아니오")}");
             }
-            
-            GUILayout.Space();
-            
-            // 컨트롤 버튼들
-            if (GUILayout.Button("NavMesh 재빌드"))
+
+            GUILayout.Space(10);
+
+            if (GUILayout.Button("NavMesh 빌드"))
             {
                 StartCoroutine(BuildNavMeshCoroutine());
             }
-            
+
             if (GUILayout.Button("경로 찾기"))
             {
                 FindPathToTarget();
@@ -202,19 +195,19 @@ namespace RecastNavigation
                 return;
             }
             
-            bool success = navComponent.FindPath(agent.position, target.position);
+            PathfindingResult result = navComponent.FindPath(agent.position, target.position);
             
-            if (success)
+            if (result.Success)
             {
-                currentPath = navComponent.CurrentPath;
+                currentPath = result.PathPoints;
                 currentPathIndex = 0;
                 isMoving = moveAgent;
                 
-                Debug.Log($"경로 찾기 성공! 포인트 수: {currentPath.Length}, 길이: {navComponent.PathLength:F2}");
+                Debug.Log($"경로 찾기 성공! 포인트 수: {currentPath.Length}, 길이: {navComponent.PathLength}");
             }
             else
             {
-                Debug.LogWarning("경로를 찾을 수 없습니다.");
+                Debug.LogWarning($"경로를 찾을 수 없습니다: {result.ErrorMessage}");
                 currentPath = null;
                 isMoving = false;
             }
@@ -307,11 +300,11 @@ namespace RecastNavigation
         {
             if (agent == null) return;
             
-            bool success = navComponent.FindPath(agent.position, position);
+            PathfindingResult result = navComponent.FindPath(agent.position, position);
             
-            if (success)
+            if (result.Success)
             {
-                currentPath = navComponent.CurrentPath;
+                currentPath = result.PathPoints;
                 currentPathIndex = 0;
                 isMoving = moveAgent;
                 
@@ -343,7 +336,7 @@ namespace RecastNavigation
                 Debug.Log($"NavMesh 정보:");
                 Debug.Log($"- 폴리곤 수: {navComponent.PolyCount}");
                 Debug.Log($"- 정점 수: {navComponent.VertexCount}");
-                Debug.Log($"- 경로 길이: {navComponent.PathLength:F2}");
+                Debug.Log($"- 경로 길이: {navComponent.PathLength}");
             }
             else
             {

@@ -1,350 +1,142 @@
 using UnityEngine;
 using UnityEditor;
 
-namespace RecastNavigation
+namespace RecastNavigation.Editor
 {
     /// <summary>
-    /// NavMeshGizmo의 에디터 전용 시각화 컴포넌트
+    /// NavMeshGizmo 커스텀 에디터
     /// </summary>
     [CustomEditor(typeof(NavMeshGizmo))]
-    public class NavMeshGizmoEditor : Editor
+    public class NavMeshGizmoEditor : UnityEditor.Editor
     {
-        private NavMeshGizmo gizmo;
-        private bool showSettings = true;
-        private bool showColors = true;
-        private bool showInfo = true;
-        private bool showPathSettings = true;
-        private bool showPerformanceSettings = true;
-        private bool showInteractionSettings = true;
-        
-        private void OnEnable()
+        private SerializedProperty showNavMeshProp;
+        private SerializedProperty showWireframeProp;
+        private SerializedProperty showFacesProp;
+        private SerializedProperty showVerticesProp;
+        private SerializedProperty navMeshColorProp;
+        private SerializedProperty wireframeColorProp;
+        private SerializedProperty faceColorProp;
+        private SerializedProperty vertexColorProp;
+        private SerializedProperty lineWidthProp;
+        private SerializedProperty lodDistanceProp;
+        private SerializedProperty enableClickToEditProp;
+        private SerializedProperty hoveredPointProp;
+
+        void OnEnable()
         {
-            gizmo = (NavMeshGizmo)target;
+            showNavMeshProp = serializedObject.FindProperty("showNavMesh");
+            showWireframeProp = serializedObject.FindProperty("showWireframe");
+            showFacesProp = serializedObject.FindProperty("showFaces");
+            showVerticesProp = serializedObject.FindProperty("showVertices");
+            navMeshColorProp = serializedObject.FindProperty("navMeshColor");
+            wireframeColorProp = serializedObject.FindProperty("wireframeColor");
+            faceColorProp = serializedObject.FindProperty("faceColor");
+            vertexColorProp = serializedObject.FindProperty("vertexColor");
+            lineWidthProp = serializedObject.FindProperty("lineWidth");
+            lodDistanceProp = serializedObject.FindProperty("lodDistance");
+            enableClickToEditProp = serializedObject.FindProperty("enableClickToEdit");
+            hoveredPointProp = serializedObject.FindProperty("hoveredPoint");
         }
-        
+
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
-            
+
+            EditorGUILayout.LabelField("NavMesh Gizmo 설정", EditorStyles.boldLabel);
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField("NavMesh 기즈모 설정", EditorStyles.boldLabel);
+
+            // 표시 옵션
+            EditorGUILayout.LabelField("표시 옵션", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(showNavMeshProp, new GUIContent("NavMesh 표시"));
+            EditorGUILayout.PropertyField(showWireframeProp, new GUIContent("와이어프레임 표시"));
+            EditorGUILayout.PropertyField(showFacesProp, new GUIContent("면 표시"));
+            EditorGUILayout.PropertyField(showVerticesProp, new GUIContent("정점 표시"));
+
             EditorGUILayout.Space();
-            
-            // 시각화 설정
-            showSettings = EditorGUILayout.Foldout(showSettings, "시각화 설정");
-            if (showSettings)
-            {
-                EditorGUI.indentLevel++;
-                
-                SerializedProperty showNavMesh = serializedObject.FindProperty("showNavMesh");
-                SerializedProperty showWireframe = serializedObject.FindProperty("showWireframe");
-                SerializedProperty showFaces = serializedObject.FindProperty("showFaces");
-                SerializedProperty showVertices = serializedObject.FindProperty("showVertices");
-                
-                EditorGUILayout.PropertyField(showNavMesh, new GUIContent("NavMesh 표시"));
-                EditorGUILayout.PropertyField(showWireframe, new GUIContent("와이어프레임 표시"));
-                EditorGUILayout.PropertyField(showFaces, new GUIContent("면 표시"));
-                EditorGUILayout.PropertyField(showVertices, new GUIContent("정점 표시"));
-                
-                EditorGUI.indentLevel--;
-            }
-            
-            EditorGUILayout.Space();
-            
+
             // 색상 설정
-            showColors = EditorGUILayout.Foldout(showColors, "색상 설정");
-            if (showColors)
-            {
-                EditorGUI.indentLevel++;
-                
-                SerializedProperty navMeshColor = serializedObject.FindProperty("navMeshColor");
-                SerializedProperty wireframeColor = serializedObject.FindProperty("wireframeColor");
-                SerializedProperty vertexColor = serializedObject.FindProperty("vertexColor");
-                
-                EditorGUILayout.PropertyField(navMeshColor, new GUIContent("NavMesh 색상"));
-                EditorGUILayout.PropertyField(wireframeColor, new GUIContent("와이어프레임 색상"));
-                EditorGUILayout.PropertyField(vertexColor, new GUIContent("정점 색상"));
-                
-                EditorGUI.indentLevel--;
-            }
-            
+            EditorGUILayout.LabelField("색상 설정", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(navMeshColorProp, new GUIContent("NavMesh 색상"));
+            EditorGUILayout.PropertyField(wireframeColorProp, new GUIContent("와이어프레임 색상"));
+            EditorGUILayout.PropertyField(faceColorProp, new GUIContent("면 색상"));
+            EditorGUILayout.PropertyField(vertexColorProp, new GUIContent("정점 색상"));
+
             EditorGUILayout.Space();
-            
-            // 크기 설정
-            SerializedProperty vertexSize = serializedObject.FindProperty("vertexSize");
-            SerializedProperty lineWidth = serializedObject.FindProperty("lineWidth");
-            
-            EditorGUILayout.PropertyField(vertexSize, new GUIContent("정점 크기"));
-            EditorGUILayout.PropertyField(lineWidth, new GUIContent("선 두께"));
-            
+
+            // 기타 설정
+            EditorGUILayout.LabelField("기타 설정", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(lineWidthProp, new GUIContent("선 두께"));
+            EditorGUILayout.PropertyField(lodDistanceProp, new GUIContent("LOD 거리"));
+            EditorGUILayout.PropertyField(enableClickToEditProp, new GUIContent("클릭 편집 활성화"));
+
             EditorGUILayout.Space();
+
+            // 액션 버튼들
+            EditorGUILayout.LabelField("액션", EditorStyles.boldLabel);
             
-            // 자동 업데이트 설정
-            SerializedProperty autoUpdate = serializedObject.FindProperty("autoUpdate");
-            SerializedProperty updateInterval = serializedObject.FindProperty("updateInterval");
+            NavMeshGizmo gizmo = (NavMeshGizmo)target;
             
-            EditorGUILayout.PropertyField(autoUpdate, new GUIContent("자동 업데이트"));
-            if (autoUpdate.boolValue)
-            {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(updateInterval, new GUIContent("업데이트 간격"));
-                EditorGUI.indentLevel--;
-            }
-            
-            EditorGUILayout.Space();
-            
-            // 정보 표시
-            showInfo = EditorGUILayout.Foldout(showInfo, "NavMesh 정보");
-            if (showInfo)
-            {
-                EditorGUI.indentLevel++;
-                
-                EditorGUILayout.LabelField("정점 수", RecastNavigationWrapper.GetVertexCount().ToString());
-                EditorGUILayout.LabelField("폴리곤 수", RecastNavigationWrapper.GetPolyCount().ToString());
-                
-                EditorGUI.indentLevel--;
-            }
-            
-            EditorGUILayout.Space();
-            
-            // 경로 시각화 설정
-            showPathSettings = EditorGUILayout.Foldout(showPathSettings, "경로 시각화 설정");
-            if (showPathSettings)
-            {
-                EditorGUI.indentLevel++;
-                
-                SerializedProperty showPath = serializedObject.FindProperty("showPath");
-                SerializedProperty animatePath = serializedObject.FindProperty("animatePath");
-                SerializedProperty pathAnimationSpeed = serializedObject.FindProperty("pathAnimationSpeed");
-                SerializedProperty pathStartColor = serializedObject.FindProperty("pathStartColor");
-                SerializedProperty pathEndColor = serializedObject.FindProperty("pathEndColor");
-                SerializedProperty showPathArrows = serializedObject.FindProperty("showPathArrows");
-                SerializedProperty arrowSize = serializedObject.FindProperty("arrowSize");
-                
-                EditorGUILayout.PropertyField(showPath, new GUIContent("경로 표시"));
-                EditorGUILayout.PropertyField(animatePath, new GUIContent("경로 애니메이션"));
-                
-                if (animatePath.boolValue)
-                {
-                    EditorGUILayout.PropertyField(pathAnimationSpeed, new GUIContent("애니메이션 속도"));
-                }
-                
-                EditorGUILayout.PropertyField(pathStartColor, new GUIContent("시작 색상"));
-                EditorGUILayout.PropertyField(pathEndColor, new GUIContent("끝 색상"));
-                EditorGUILayout.PropertyField(showPathArrows, new GUIContent("화살표 표시"));
-                
-                if (showPathArrows.boolValue)
-                {
-                    EditorGUILayout.PropertyField(arrowSize, new GUIContent("화살표 크기"));
-                }
-                
-                EditorGUI.indentLevel--;
-            }
-            
-            EditorGUILayout.Space();
-            
-            // 성능 최적화 설정
-            showPerformanceSettings = EditorGUILayout.Foldout(showPerformanceSettings, "성능 최적화 설정");
-            if (showPerformanceSettings)
-            {
-                EditorGUI.indentLevel++;
-                
-                SerializedProperty useMeshCaching = serializedObject.FindProperty("useMeshCaching");
-                SerializedProperty useLOD = serializedObject.FindProperty("useLOD");
-                SerializedProperty lodDistance = serializedObject.FindProperty("lodDistance");
-                SerializedProperty maxVisibleTriangles = serializedObject.FindProperty("maxVisibleTriangles");
-                
-                EditorGUILayout.PropertyField(useMeshCaching, new GUIContent("메시 캐싱"));
-                EditorGUILayout.PropertyField(useLOD, new GUIContent("LOD 사용"));
-                
-                if (useLOD.boolValue)
-                {
-                    EditorGUILayout.PropertyField(lodDistance, new GUIContent("LOD 거리"));
-                    EditorGUILayout.PropertyField(maxVisibleTriangles, new GUIContent("최대 삼각형 수"));
-                }
-                
-                if (GUILayout.Button("캐시 정리"))
-                {
-                    gizmo.ClearCache();
-                }
-                
-                EditorGUI.indentLevel--;
-            }
-            
-            EditorGUILayout.Space();
-            
-            // 인터랙션 설정
-            showInteractionSettings = EditorGUILayout.Foldout(showInteractionSettings, "인터랙션 설정");
-            if (showInteractionSettings)
-            {
-                EditorGUI.indentLevel++;
-                
-                SerializedProperty enableInteraction = serializedObject.FindProperty("enableInteraction");
-                SerializedProperty showInfoOnHover = serializedObject.FindProperty("showInfoOnHover");
-                SerializedProperty enableClickToEdit = serializedObject.FindProperty("enableClickToEdit");
-                
-                EditorGUILayout.PropertyField(enableInteraction, new GUIContent("인터랙션 활성화"));
-                EditorGUILayout.PropertyField(showInfoOnHover, new GUIContent("호버 정보 표시"));
-                EditorGUILayout.PropertyField(enableClickToEdit, new GUIContent("클릭 편집"));
-                
-                if (enableInteraction.boolValue)
-                {
-                    EditorGUILayout.HelpBox(
-                        "키보드 단축키:\n" +
-                        "T - 시각화 토글\n" +
-                        "R - 새로고침\n" +
-                        "W - 와이어프레임 토글\n" +
-                        "F - 면 토글\n" +
-                        "V - 정점 토글\n" +
-                        "A - 경로 애니메이션 토글",
-                        MessageType.Info
-                    );
-                }
-                
-                EditorGUI.indentLevel--;
-            }
-            
-            EditorGUILayout.Space();
-            
-            // 버튼들
             EditorGUILayout.BeginHorizontal();
-            
-            if (GUILayout.Button("데이터 새로고침"))
+            if (GUILayout.Button("NavMesh 업데이트"))
             {
                 gizmo.UpdateNavMeshData();
-                SceneView.RepaintAll();
             }
-            
-            if (GUILayout.Button("기즈모 새로고침"))
+            if (GUILayout.Button("경로 지우기"))
             {
-                SceneView.RepaintAll();
+                gizmo.ClearPath();
             }
-            
             EditorGUILayout.EndHorizontal();
-            
-            EditorGUILayout.Space();
-            
-            // 프리셋 버튼들
-            EditorGUILayout.LabelField("빠른 설정", EditorStyles.boldLabel);
-            
+
             EditorGUILayout.BeginHorizontal();
-            
-            if (GUILayout.Button("기본"))
+            if (GUILayout.Button("모든 표시"))
             {
-                SetDefaultSettings();
+                gizmo.SetShowNavMesh(true);
+                gizmo.SetShowWireframe(true);
+                gizmo.SetShowFaces(true);
+                gizmo.SetShowVertices(true);
             }
-            
-            if (GUILayout.Button("와이어프레임만"))
+            if (GUILayout.Button("모든 숨기기"))
             {
-                SetWireframeOnlySettings();
+                gizmo.SetShowNavMesh(false);
+                gizmo.SetShowWireframe(false);
+                gizmo.SetShowFaces(false);
+                gizmo.SetShowVertices(false);
             }
-            
-            if (GUILayout.Button("면만"))
-            {
-                SetFacesOnlySettings();
-            }
-            
             EditorGUILayout.EndHorizontal();
-            
-            serializedObject.ApplyModifiedProperties();
-        }
-        
-        /// <summary>
-        /// 기본 설정 적용
-        /// </summary>
-        private void SetDefaultSettings()
-        {
-            SerializedProperty showNavMesh = serializedObject.FindProperty("showNavMesh");
-            SerializedProperty showWireframe = serializedObject.FindProperty("showWireframe");
-            SerializedProperty showFaces = serializedObject.FindProperty("showFaces");
-            SerializedProperty showVertices = serializedObject.FindProperty("showVertices");
-            
-            showNavMesh.boolValue = true;
-            showWireframe.boolValue = true;
-            showFaces.boolValue = true;
-            showVertices.boolValue = false;
-            
-            serializedObject.ApplyModifiedProperties();
-            SceneView.RepaintAll();
-        }
-        
-        /// <summary>
-        /// 와이어프레임만 표시 설정
-        /// </summary>
-        private void SetWireframeOnlySettings()
-        {
-            SerializedProperty showNavMesh = serializedObject.FindProperty("showNavMesh");
-            SerializedProperty showWireframe = serializedObject.FindProperty("showWireframe");
-            SerializedProperty showFaces = serializedObject.FindProperty("showFaces");
-            SerializedProperty showVertices = serializedObject.FindProperty("showVertices");
-            
-            showNavMesh.boolValue = true;
-            showWireframe.boolValue = true;
-            showFaces.boolValue = false;
-            showVertices.boolValue = false;
-            
-            serializedObject.ApplyModifiedProperties();
-            SceneView.RepaintAll();
-        }
-        
-        /// <summary>
-        /// 면만 표시 설정
-        /// </summary>
-        private void SetFacesOnlySettings()
-        {
-            SerializedProperty showNavMesh = serializedObject.FindProperty("showNavMesh");
-            SerializedProperty showWireframe = serializedObject.FindProperty("showWireframe");
-            SerializedProperty showFaces = serializedObject.FindProperty("showFaces");
-            SerializedProperty showVertices = serializedObject.FindProperty("showVertices");
-            
-            showNavMesh.boolValue = true;
-            showWireframe.boolValue = false;
-            showFaces.boolValue = true;
-            showVertices.boolValue = false;
-            
-            serializedObject.ApplyModifiedProperties();
-            SceneView.RepaintAll();
-        }
-        
-        /// <summary>
-        /// Scene 뷰에서 기즈모 그리기
-        /// </summary>
-        private void OnSceneGUI()
-        {
-            if (gizmo == null) return;
-            
-            // Scene 뷰에서 추가적인 시각화 요소들
-            DrawSceneGUI();
-        }
-        
-        /// <summary>
-        /// Scene GUI 그리기
-        /// </summary>
-        private void DrawSceneGUI()
-        {
-            // 현재 선택된 오브젝트가 NavMeshGizmo인 경우에만 추가 정보 표시
-            if (Selection.activeGameObject == gizmo.gameObject)
+
+            EditorGUILayout.Space();
+
+            // 정보 표시
+            if (Application.isPlaying)
             {
-                // NavMesh 정보를 Scene 뷰에 표시
-                Handles.BeginGUI();
+                EditorGUILayout.LabelField("런타임 정보", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("NavMesh 로드됨", gizmo.IsNavMeshLoaded ? "예" : "아니오");
+                EditorGUILayout.LabelField("폴리곤 수", gizmo.PolyCount.ToString());
+                EditorGUILayout.LabelField("정점 수", gizmo.VertexCount.ToString());
+                EditorGUILayout.LabelField("경로 포인트 수", gizmo.PathPointCount.ToString());
+            }
+
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        void OnSceneGUI()
+        {
+            NavMeshGizmo gizmo = (NavMeshGizmo)target;
+            
+            if (!gizmo.enableClickToEdit) return;
+
+            Event e = Event.current;
+            if (e.type == EventType.MouseDown && e.button == 0)
+            {
+                Ray ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
+                RaycastHit hit;
                 
-                GUILayout.BeginArea(new Rect(10, 10, 250, 150));
-                GUILayout.BeginVertical("box");
-                
-                GUILayout.Label("NavMesh 기즈모", EditorGUIUtility.isProSkin ? GUI.skin.label : GUI.skin.box);
-                GUILayout.Label($"정점: {RecastNavigationWrapper.GetVertexCount()}");
-                GUILayout.Label($"폴리곤: {RecastNavigationWrapper.GetPolyCount()}");
-                
-                if (GUILayout.Button("새로고침"))
+                if (Physics.Raycast(ray, out hit))
                 {
-                    gizmo.UpdateNavMeshData();
+                    gizmo.hoveredPoint = hit.point;
+                    e.Use();
                     SceneView.RepaintAll();
                 }
-                
-                GUILayout.EndVertical();
-                GUILayout.EndArea();
-                
-                Handles.EndGUI();
             }
         }
     }

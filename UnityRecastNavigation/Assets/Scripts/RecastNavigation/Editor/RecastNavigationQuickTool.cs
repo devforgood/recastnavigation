@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using RecastNavigation;
 using System.IO;
+using System.Collections.Generic;
 
 namespace RecastNavigation.Editor
 {
@@ -24,6 +25,27 @@ namespace RecastNavigation.Editor
         private NavMeshBuildSettings quickSettings;
         private string quickSavePath = "Assets/NavMeshData/";
         
+        // 빌드 설정
+        private NavMeshBuildSettings buildSettings;
+        private bool autoTransformCoordinates = true;
+        private CoordinateSystem coordinateSystem = CoordinateSystem.LeftHanded;
+        private YAxisRotation yAxisRotation = YAxisRotation.None;
+
+        // 경로 찾기 설정
+        private Transform startPoint;
+        private Transform endPoint;
+        private bool autoFindPath = false;
+        private float pathUpdateInterval = 0.5f;
+
+        // 디버그 설정
+        private bool enableDebugDraw = false;
+        private bool enableDebugLogging = false;
+        private bool showNavMeshGizmo = true;
+
+        // 배치 처리 설정
+        private List<GameObject> selectedObjects = new List<GameObject>();
+        private bool processSelectedObjects = false;
+        
         [MenuItem("Tools/RecastNavigation/Quick Tool")]
         public static void ShowWindow()
         {
@@ -37,6 +59,27 @@ namespace RecastNavigation.Editor
             
             // 상태 확인
             CheckStatus();
+
+            buildSettings = NavMeshBuildSettingsExtensions.CreateDefault();
+            UpdateSelectedObjects();
+        }
+        
+        void OnSelectionChange()
+        {
+            UpdateSelectedObjects();
+        }
+        
+        void UpdateSelectedObjects()
+        {
+            selectedObjects.Clear();
+            GameObject[] selected = Selection.gameObjects;
+            foreach (GameObject obj in selected)
+            {
+                if (obj.GetComponent<MeshFilter>() != null || obj.GetComponent<MeshRenderer>() != null)
+                {
+                    selectedObjects.Add(obj);
+                }
+            }
         }
         
         void OnGUI()
@@ -366,58 +409,85 @@ namespace RecastNavigation.Editor
         
         void BuildNavMeshFromSelection()
         {
-            if (!RecastNavigationWrapper.Initialize())
+            if (selectedObjects.Count == 0)
             {
-                statusMessage = "RecastNavigation 초기화 실패";
+                EditorUtility.DisplayDialog("오류", "처리할 메시 오브젝트가 선택되지 않았습니다.", "확인");
                 return;
             }
-            
-            GameObject[] selectedObjects = Selection.gameObjects;
-            if (selectedObjects.Length == 0)
+
+            RecastNavigationComponent navComponent = FindObjectOfType<RecastNavigationComponent>();
+            if (navComponent == null)
             {
-                statusMessage = "선택된 오브젝트가 없습니다.";
-                return;
+                navComponent = CreateRecastNavigationComponent();
             }
-            
-            // 선택된 오브젝트들의 Mesh 수집
-            List<Mesh> meshes = new List<Mesh>();
-            foreach (var obj in selectedObjects)
+
+            try
             {
-                MeshFilter meshFilter = obj.GetComponent<MeshFilter>();
-                if (meshFilter != null && meshFilter.sharedMesh != null)
+                EditorUtility.DisplayProgressBar("NavMesh 빌드", "선택된 오브젝트에서 NavMesh 빌드 중...", 0f);
+                
+                // 선택된 오브젝트들의 메시를 합치기
+                List<Vector3> allVertices = new List<Vector3>();
+                List<int> allIndices = new List<int>();
+
+                for (int i = 0; i < selectedObjects.Count; i++)
                 {
-                    meshes.Add(meshFilter.sharedMesh);
+                    EditorUtility.DisplayProgressBar("NavMesh 빌드", $"오브젝트 처리 중... ({i + 1}/{selectedObjects.Count})", (float)i / selectedObjects.Count);
+                    
+                    GameObject obj = selectedObjects[i];
+                    MeshFilter meshFilter = obj.GetComponent<MeshFilter>();
+                    
+                    if (meshFilter != null && meshFilter.sharedMesh != null)
+                    {
+                        Mesh mesh = meshFilter.sharedMesh;
+                        Vector3[] vertices = mesh.vertices;
+                        int[] indices = mesh.triangles;
+
+                        // 월드 좌표로 변환
+                        Transform transform = obj.transform;
+                        for (int j = 0; j < vertices.Length; j++)
+                        {
+                            vertices[j] = transform.TransformPoint(vertices[j]);
+                        }
+
+                        // 인덱스 조정
+                        int vertexOffset = allVertices.Count;
+                        for (int j = 0; j < indices.Length; j++)
+                        {
+                            indices[j] += vertexOffset;
+                        }
+
+                        allVertices.AddRange(vertices);
+                        allIndices.AddRange(indices);
+                    }
                 }
-            }
-            
-            if (meshes.Count == 0)
-            {
-                statusMessage = "선택된 오브젝트에서 Mesh를 찾을 수 없습니다.";
-                return;
-            }
-            
-            // 메시 합치기
-            Mesh combinedMesh = CombineMeshes(meshes);
-            
-            // NavMesh 빌드
-            var result = RecastNavigationWrapper.BuildNavMesh(combinedMesh, quickSettings);
-            
-            if (result.Success)
-            {
-                if (RecastNavigationWrapper.LoadNavMesh(result.NavMeshData))
+
+                if (allVertices.Count == 0 || allIndices.Count == 0)
                 {
-                    isNavMeshLoaded = true;
-                    statusMessage = $"NavMesh 빌드 성공! (선택된 오브젝트)";
-                    Debug.Log($"NavMesh 빌드 성공! (선택된 오브젝트) 폴리곤: {RecastNavigationWrapper.GetPolyCount()}");
+                    EditorUtility.ClearProgressBar();
+                    EditorUtility.DisplayDialog("오류", "유효한 메시 데이터가 없습니다.", "확인");
+                    return;
+                }
+
+                bool success = navComponent.BuildNavMesh(allVertices.ToArray(), allIndices.ToArray());
+                
+                EditorUtility.ClearProgressBar();
+                
+                if (success)
+                {
+                    EditorUtility.DisplayDialog("성공", "선택된 오브젝트에서 NavMesh 빌드가 완료되었습니다.", "확인");
+                    Debug.Log("선택된 오브젝트에서 NavMesh 빌드 완료!");
                 }
                 else
                 {
-                    statusMessage = "NavMesh 로드 실패";
+                    EditorUtility.DisplayDialog("오류", "선택된 오브젝트에서 NavMesh 빌드에 실패했습니다.", "확인");
+                    Debug.LogError("선택된 오브젝트에서 NavMesh 빌드 실패!");
                 }
             }
-            else
+            catch (System.Exception e)
             {
-                statusMessage = $"NavMesh 빌드 실패: {result.ErrorMessage}";
+                EditorUtility.ClearProgressBar();
+                EditorUtility.DisplayDialog("오류", $"NavMesh 빌드 중 오류가 발생했습니다: {e.Message}", "확인");
+                Debug.LogError($"NavMesh 빌드 중 오류: {e.Message}");
             }
         }
         
@@ -640,16 +710,20 @@ namespace RecastNavigation.Editor
         
         void PrintNavMeshInfo()
         {
-            if (isNavMeshLoaded)
+            RecastNavigationComponent navComponent = FindObjectOfType<RecastNavigationComponent>();
+            if (navComponent == null)
             {
-                Debug.Log("NavMesh 상세 정보:");
-                Debug.Log($"- 폴리곤 수: {RecastNavigationWrapper.GetPolyCount()}");
-                Debug.Log($"- 정점 수: {RecastNavigationWrapper.GetVertexCount()}");
+                Debug.Log("RecastNavigationComponent를 찾을 수 없습니다.");
+                return;
             }
-            else
-            {
-                Debug.Log("NavMesh가 로드되지 않았습니다.");
-            }
+
+            Debug.Log("=== NavMesh 정보 ===");
+            Debug.Log($"초기화됨: {navComponent.IsInitialized}");
+            Debug.Log($"NavMesh 로드됨: {navComponent.IsNavMeshLoaded}");
+            Debug.Log($"폴리곤 수: {navComponent.PolyCount}");
+            Debug.Log($"정점 수: {navComponent.VertexCount}");
+            Debug.Log($"경로 길이: {navComponent.PathLength}");
+            Debug.Log("==================");
         }
         
         void PrintNavMeshStats()
@@ -755,6 +829,14 @@ namespace RecastNavigation.Editor
             mesh.RecalculateNormals();
             
             return mesh;
+        }
+
+        RecastNavigationComponent CreateRecastNavigationComponent()
+        {
+            GameObject go = new GameObject("RecastNavigation");
+            RecastNavigationComponent component = go.AddComponent<RecastNavigationComponent>();
+            Debug.Log("RecastNavigationComponent가 생성되었습니다.");
+            return component;
         }
     }
 } 
