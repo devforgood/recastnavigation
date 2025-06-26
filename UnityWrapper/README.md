@@ -78,6 +78,68 @@ RecastNavigation을 Unity3D에서 사용할 수 있도록 DLL로 래핑한 프�
 3. **결과물 확인**
    - `UnityPlugins/Linux/x64/libRecastNavigationUnity.so` 파일이 생성됩니다.
 
+## 테스트 실행
+
+### C++ 테스트
+
+프로젝트에는 포괄적인 C++ 유닛테스트가 포함되어 있습니다.
+
+#### Windows에서 테스트 실행
+```bash
+cd UnityWrapper
+run_tests.bat
+```
+
+#### Linux/macOS에서 테스트 실행
+```bash
+cd UnityWrapper
+chmod +x run_tests.sh
+./run_tests.sh
+```
+
+#### 수동으로 테스트 실행
+```bash
+# 빌드 디렉토리에서
+cmake .. -DRECASTNAVIGATION_UNITY=ON -DRECASTNAVIGATION_TESTS=ON
+cmake --build . --config Release
+ctest --output-on-failure -C Release
+```
+
+### Unity C# 테스트
+
+Unity 프로젝트에서 C# 테스트를 실행하려면:
+
+1. **테스트 파일 복사**
+   ```
+   Assets/
+     Scripts/
+       RecastNavigation/
+         Tests/
+           RecastNavigationWrapperTests.cs
+   ```
+
+2. **Unity Test Runner 실행**
+   - Unity 에디터에서 `Window > General > Test Runner` 열기
+   - `EditMode` 탭에서 테스트 실행
+
+3. **명령줄에서 테스트 실행**
+   ```bash
+   unity-editor -runTests -testPlatform EditMode -projectPath <UnityProjectPath>
+   ```
+
+## 테스트 커버리지
+
+### C++ 테스트
+- **UnityRecastWrapper**: 초기화, 정리, 기본 기능 테스트
+- **UnityNavMeshBuilder**: NavMesh 빌드, 로드, 다양한 설정 테스트
+- **UnityPathfinding**: 경로 찾기, 경로 유틸리티, 에러 처리 테스트
+
+### C# 테스트
+- **초기화 및 정리**: RecastNavigation 초기화/정리 테스트
+- **NavMesh 빌드**: 다양한 메시와 설정으로 NavMesh 빌드 테스트
+- **경로 찾기**: 유효한/무효한 경로 찾기 테스트
+- **에러 처리**: null 입력, 잘못된 데이터 처리 테스트
+
 ## Unity에서 사용하기
 
 ### 1. DLL 파일 복사
@@ -105,6 +167,8 @@ Assets/
     RecastNavigation/
       RecastNavigationWrapper.cs
       RecastNavigationExample.cs
+      Tests/
+        RecastNavigationWrapperTests.cs
 ```
 
 ### 3. 사용 예제
@@ -211,10 +275,24 @@ var customSettings = new RecastNavigationWrapper.NavMeshBuildSettings
 - 시작점과 끝점이 NavMesh 내부에 있는지 확인
 - 경로가 존재하는지 확인
 
+### 테스트 실패
+- Catch2 라이브러리가 설치되어 있는지 확인
+- 빌드 설정에서 테스트가 활성화되어 있는지 확인
+- 메모리 누수나 크래시가 없는지 확인
+
 ## 라이선스
 
 이 프로젝트는 RecastNavigation과 동일한 라이선스를 따릅니다. 자세한 내용은 LICENSE.txt 파일을 참조하세요.
 
 ## 기여
 
-버그 리포트나 기능 요청은 GitHub Issues를 통해 제출해 주세요. Pull Request도 환영합니다. 
+버그 리포트나 기능 요청은 GitHub Issues를 통해 제출해 주세요. Pull Request도 환영합니다.
+
+### 테스트 기여
+
+새로운 기능을 추가할 때는 다음을 확인해 주세요:
+
+1. **C++ 테스트 추가**: 새로운 기능에 대한 유닛테스트 작성
+2. **C# 테스트 추가**: Unity 래퍼에 대한 테스트 작성
+3. **테스트 실행**: 모든 테스트가 통과하는지 확인
+4. **문서 업데이트**: README와 주석 업데이트 

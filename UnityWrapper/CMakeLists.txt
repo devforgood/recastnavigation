@@ -104,4 +104,9 @@ install(TARGETS RecastNavigationUnity
 
 install(FILES ${UNITY_WRAPPER_HEADERS}
     DESTINATION "UnityPlugins/Include"
-) 
+)
+
+# 테스트 프로젝트 추가
+if(RECASTNAVIGATION_TESTS)
+    add_subdirectory(Tests)
+endif() 
