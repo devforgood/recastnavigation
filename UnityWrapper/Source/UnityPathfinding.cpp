@@ -1,19 +1,21 @@
 #include "UnityPathfinding.h"
 #include "DetourNavMeshQuery.h"
+#include "Recast.h"
 #include <cmath>
 #include <algorithm>
 
 UnityPathfinding::UnityPathfinding() : m_navMeshQuery(nullptr) {
-    // 기본 필터 설정
+    // Default filter settings
     m_filter.setIncludeFlags(0xffff);
     m_filter.setExcludeFlags(0);
-    m_filter.setAreaCost(DT_TILECACHE_WALKABLE_AREA, 1.0f);
+    m_filter.setAreaCost(RC_WALKABLE_AREA, 1.0f);
 }
 
 UnityPathfinding::~UnityPathfinding() {
 }
 
 void UnityPathfinding::SetNavMesh(dtNavMesh* navMesh, dtNavMeshQuery* navMeshQuery) {
+    (void)navMesh; // Suppress unused parameter warning
     m_navMeshQuery = navMeshQuery;
 }
 
@@ -50,7 +52,11 @@ UnityPathResult UnityPathfinding::FindPath(
         m_pathPolys.clear();
         m_pathPoints.clear();
         
-        dtStatus status = m_navMeshQuery->findPath(startRef, endRef, startPt, endPt, &m_filter, m_pathPolys);
+        int pathCount = 0;
+        const int maxPath = 256;
+        dtPolyRef path[maxPath];
+        
+        dtStatus status = m_navMeshQuery->findPath(startRef, endRef, startPt, endPt, &m_filter, path, &pathCount, maxPath);
         
         if (dtStatusFailed(status)) {
             result.success = false;
@@ -58,16 +64,22 @@ UnityPathResult UnityPathfinding::FindPath(
             return result;
         }
         
-        if (m_pathPolys.empty()) {
+        if (pathCount == 0) {
             result.success = false;
             result.errorMessage = const_cast<char*>("No path found");
             return result;
         }
         
         // 경로 스무딩
-        status = m_navMeshQuery->findStraightPath(startPt, endPt, m_pathPolys.data(), 
-                                                 static_cast<int>(m_pathPolys.size()),
-                                                 m_pathPoints);
+        const int maxStraightPath = 256;
+        float straightPath[maxStraightPath * 3];
+        unsigned char straightPathFlags[maxStraightPath];
+        dtPolyRef straightPathRefs[maxStraightPath];
+        int straightPathCount = 0;
+        
+        status = m_navMeshQuery->findStraightPath(startPt, endPt, path, pathCount,
+                                                 straightPath, straightPathFlags, straightPathRefs,
+                                                 &straightPathCount, maxStraightPath);
         
         if (dtStatusFailed(status)) {
             result.success = false;
@@ -76,11 +88,10 @@ UnityPathResult UnityPathfinding::FindPath(
         }
         
         // 결과 복사
-        int pointCount = static_cast<int>(m_pathPoints.size()) / 3;
-        if (pointCount > 0) {
-            result.pointCount = pointCount;
-            result.pathPoints = new float[m_pathPoints.size()];
-            std::copy(m_pathPoints.begin(), m_pathPoints.end(), result.pathPoints);
+        if (straightPathCount > 0) {
+            result.pointCount = straightPathCount;
+            result.pathPoints = new float[straightPathCount * 3];
+            std::copy(straightPath, straightPath + straightPathCount * 3, result.pathPoints);
             result.success = true;
             result.errorMessage = nullptr;
         } else {
@@ -270,8 +281,9 @@ bool UnityPathfinding::FindNearestPoly(float x, float y, float z, dtPolyRef& pol
         return false;
     }
     
+    float center[3] = { x, y, z };
     float extents[3] = { 2.0f, 4.0f, 2.0f };
-    dtStatus status = m_navMeshQuery->findNearestPoly(&x, &y, &z, extents, &m_filter, &polyRef, nearestPt);
+    dtStatus status = m_navMeshQuery->findNearestPoly(center, extents, &m_filter, &polyRef, nearestPt);
     
     return !dtStatusFailed(status) && polyRef != 0;
 }
@@ -291,9 +303,10 @@ bool UnityPathfinding::Raycast(float startX, float startY, float startZ, float e
     float endPt[3] = { endX, endY, endZ };
     float t;
     float normal[3];
-    dtPolyRef hitRef;
+    dtPolyRef path[32];
+    int pathCount = 0;
     
-    dtStatus status = m_navMeshQuery->raycast(startRef, startPt, endPt, &m_filter, &t, normal, &hitRef, nullptr, 0);
+    dtStatus status = m_navMeshQuery->raycast(startRef, startPt, endPt, &m_filter, &t, normal, path, &pathCount, 32);
     
     if (dtStatusFailed(status)) {
         return false;

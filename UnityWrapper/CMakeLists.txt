@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.15)
 
 # Unity용 RecastNavigation DLL 프로젝트
 project(RecastNavigationUnity)
@@ -20,9 +20,6 @@ elseif(UNIX)
     set(UNITY_PLATFORM "Linux")
     set(UNITY_ARCH "x64")
 endif()
-
-# RecastNavigation 라이브러리 링크
-find_package(RecastNavigation REQUIRED)
 
 # Unity Wrapper 소스 파일들
 set(UNITY_WRAPPER_SOURCES
@@ -54,13 +51,13 @@ target_include_directories(RecastNavigationUnity PRIVATE
     ${CMAKE_SOURCE_DIR}/DebugUtils/Include
 )
 
-# 라이브러리 링크
+# 라이브러리 링크 (직접 링크)
 target_link_libraries(RecastNavigationUnity
-    RecastNavigation::Recast
-    RecastNavigation::Detour
-    RecastNavigation::DetourCrowd
-    RecastNavigation::DetourTileCache
-    RecastNavigation::DebugUtils
+    Recast
+    Detour
+    DetourCrowd
+    DetourTileCache
+    DebugUtils
 )
 
 # 컴파일러별 설정

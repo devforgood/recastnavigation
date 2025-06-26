@@ -65,6 +65,8 @@ extern "C" {
         int maxVertsPerPoly;      // 폴리곤당 최대 정점 수
         float detailSampleDist;   // 상세 샘플링 거리
         float detailSampleMaxError; // 상세 샘플링 최대 오차
+        float maxSimplificationError; // 최대 단순화 오차
+        float maxEdgeLen;         // 최대 엣지 길이
         bool autoTransformCoordinates; // 자동 좌표 변환
     };
     

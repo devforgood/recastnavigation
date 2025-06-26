@@ -31,7 +31,7 @@ public:
     
 private:
     // Recast 컨텍스트
-    rcContext* m_ctx;
+    std::unique_ptr<rcContext> m_ctx;
     
     // NavMesh 및 쿼리 객체
     std::unique_ptr<dtNavMesh> m_navMesh;

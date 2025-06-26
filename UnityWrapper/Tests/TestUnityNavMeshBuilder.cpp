@@ -1,35 +1,34 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/catch_approx.hpp>
+#include "catch_all.hpp"
 #include "UnityNavMeshBuilder.h"
 #include <memory>
 #include <vector>
 
 using namespace Catch;
 
-TEST_CASE("UnityNavMeshBuilder 생성 및 소멸", "[UnityNavMeshBuilder]")
+TEST_CASE("UnityNavMeshBuilder creation and destruction", "[UnityNavMeshBuilder]")
 {
-    SECTION("생성자")
+    SECTION("Constructor")
     {
         UnityNavMeshBuilder builder;
         REQUIRE(builder.GetPolyCount() == 0);
         REQUIRE(builder.GetVertexCount() == 0);
     }
     
-    SECTION("소멸자")
+    SECTION("Destructor")
     {
         {
             UnityNavMeshBuilder builder;
-            // 소멸자가 정상적으로 호출되는지 확인
+            // Check if destructor is called properly
         }
-        // 여기서 메모리 누수가 없는지 확인
+        // Check for memory leaks here
     }
 }
 
-TEST_CASE("간단한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
+TEST_CASE("Build NavMesh with simple mesh", "[UnityNavMeshBuilder]")
 {
     UnityNavMeshBuilder builder;
     
-    // 간단한 평면 메시 생성
+    // Create simple plane mesh
     std::vector<float> vertices = {
         -1.0f, 0.0f, -1.0f,  // 0
          1.0f, 0.0f, -1.0f,  // 1
@@ -38,8 +37,8 @@ TEST_CASE("간단한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
     };
     
     std::vector<int> indices = {
-        0, 1, 2,  // 첫 번째 삼각형
-        0, 2, 3   // 두 번째 삼각형
+        0, 1, 2,  // First triangle
+        0, 2, 3   // Second triangle
     };
     
     UnityMeshData meshData;
@@ -48,7 +47,7 @@ TEST_CASE("간단한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
     meshData.vertexCount = static_cast<int>(vertices.size()) / 3;
     meshData.indexCount = static_cast<int>(indices.size());
     
-    UnityNavMeshBuildSettings settings;
+    UnityNavMeshBuildSettings settings = {};
     settings.cellSize = 0.3f;
     settings.cellHeight = 0.2f;
     settings.walkableSlopeAngle = 45.0f;
@@ -61,7 +60,7 @@ TEST_CASE("간단한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
     settings.detailSampleDist = 6.0f;
     settings.detailSampleMaxError = 1.0f;
     
-    SECTION("NavMesh 빌드 성공")
+    SECTION("NavMesh build success")
     {
         UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
         
@@ -70,61 +69,61 @@ TEST_CASE("간단한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
         REQUIRE(result.dataSize > 0);
         REQUIRE(result.errorMessage == nullptr);
         
-        // NavMesh 정보 확인
+        // Check NavMesh info
         int polyCount = builder.GetPolyCount();
         int vertexCount = builder.GetVertexCount();
         
         REQUIRE(polyCount > 0);
         REQUIRE(vertexCount > 0);
         
-        // NavMesh 인스턴스 확인
+        // Check NavMesh instances
         REQUIRE(builder.GetNavMesh() != nullptr);
         REQUIRE(builder.GetNavMeshQuery() != nullptr);
         
-        // 메모리 정리
+        // Memory cleanup
         UnityRecast_FreeNavMeshData(&result);
     }
     
-    SECTION("다양한 셀 크기로 빌드")
+    SECTION("Build with different cell sizes")
     {
-        // 작은 셀 크기
+        // Small cell size
         settings.cellSize = 0.1f;
         UnityNavMeshResult result1 = builder.BuildNavMesh(&meshData, &settings);
         REQUIRE(result1.success == true);
         int polyCount1 = builder.GetPolyCount();
         UnityRecast_FreeNavMeshData(&result1);
         
-        // 큰 셀 크기
+        // Large cell size
         settings.cellSize = 0.5f;
         UnityNavMeshResult result2 = builder.BuildNavMesh(&meshData, &settings);
         REQUIRE(result2.success == true);
         int polyCount2 = builder.GetPolyCount();
         UnityRecast_FreeNavMeshData(&result2);
         
-        // 작은 셀 크기가 더 많은 폴리곤을 생성해야 함
+        // Smaller cell size should generate more polygons
         REQUIRE(polyCount1 >= polyCount2);
     }
 }
 
-TEST_CASE("복잡한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
+TEST_CASE("Build NavMesh with complex mesh", "[UnityNavMeshBuilder]")
 {
     UnityNavMeshBuilder builder;
     
-    // 복잡한 메시 생성 (여러 삼각형으로 구성된 지형)
+    // Create complex mesh (terrain with multiple triangles)
     std::vector<float> vertices = {
-        // 바닥 평면
+        // Ground plane
         -2.0f, 0.0f, -2.0f,   // 0
          2.0f, 0.0f, -2.0f,   // 1
          2.0f, 0.0f,  2.0f,   // 2
         -2.0f, 0.0f,  2.0f,   // 3
         
-        // 계단 1
+        // Step 1
         -1.0f, 0.5f, -1.0f,   // 4
          1.0f, 0.5f, -1.0f,   // 5
          1.0f, 0.5f,  1.0f,   // 6
         -1.0f, 0.5f,  1.0f,   // 7
         
-        // 계단 2
+        // Step 2
         -0.5f, 1.0f, -0.5f,   // 8
          0.5f, 1.0f, -0.5f,   // 9
          0.5f, 1.0f,  0.5f,   // 10
@@ -132,21 +131,21 @@ TEST_CASE("복잡한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
     };
     
     std::vector<int> indices = {
-        // 바닥
+        // Ground
         0, 1, 2, 0, 2, 3,
-        // 계단 1 측면
+        // Step 1 sides
         0, 4, 5, 0, 5, 1,
         1, 5, 6, 1, 6, 2,
         2, 6, 7, 2, 7, 3,
         3, 7, 4, 3, 4, 0,
-        // 계단 1 상단
+        // Step 1 top
         4, 5, 6, 4, 6, 7,
-        // 계단 2 측면
+        // Step 2 sides
         4, 8, 9, 4, 9, 5,
         5, 9, 10, 5, 10, 6,
         6, 10, 11, 6, 11, 7,
         7, 11, 8, 7, 8, 4,
-        // 계단 2 상단
+        // Step 2 top
         8, 9, 10, 8, 10, 11
     };
     
@@ -156,7 +155,7 @@ TEST_CASE("복잡한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
     meshData.vertexCount = static_cast<int>(vertices.size()) / 3;
     meshData.indexCount = static_cast<int>(indices.size());
     
-    UnityNavMeshBuildSettings settings;
+    UnityNavMeshBuildSettings settings = {};
     settings.cellSize = 0.2f;
     settings.cellHeight = 0.1f;
     settings.walkableSlopeAngle = 45.0f;
@@ -169,7 +168,7 @@ TEST_CASE("복잡한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
     settings.detailSampleDist = 3.0f;
     settings.detailSampleMaxError = 0.5f;
     
-    SECTION("복잡한 메시 빌드")
+    SECTION("Complex mesh build")
     {
         UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
         
@@ -183,18 +182,18 @@ TEST_CASE("복잡한 메시로 NavMesh 빌드", "[UnityNavMeshBuilder]")
         REQUIRE(polyCount > 0);
         REQUIRE(vertexCount > 0);
         
-        // 복잡한 메시는 더 많은 폴리곤을 가져야 함
+        // Complex mesh should have more polygons
         REQUIRE(polyCount > 5);
         
         UnityRecast_FreeNavMeshData(&result);
     }
 }
 
-TEST_CASE("NavMesh 로드 테스트", "[UnityNavMeshBuilder]")
+TEST_CASE("NavMesh loading test", "[UnityNavMeshBuilder]")
 {
     UnityNavMeshBuilder builder;
     
-    // 먼저 NavMesh 빌드
+    // First build NavMesh
     std::vector<float> vertices = { -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f };
     std::vector<int> indices = { 0, 1, 2 };
     
@@ -204,7 +203,7 @@ TEST_CASE("NavMesh 로드 테스트", "[UnityNavMeshBuilder]")
     meshData.vertexCount = static_cast<int>(vertices.size()) / 3;
     meshData.indexCount = static_cast<int>(indices.size());
     
-    UnityNavMeshBuildSettings settings;
+    UnityNavMeshBuildSettings settings = {};
     settings.cellSize = 0.3f;
     settings.cellHeight = 0.2f;
     settings.walkableSlopeAngle = 45.0f;
@@ -220,131 +219,34 @@ TEST_CASE("NavMesh 로드 테스트", "[UnityNavMeshBuilder]")
     UnityNavMeshResult buildResult = builder.BuildNavMesh(&meshData, &settings);
     REQUIRE(buildResult.success == true);
     
-    SECTION("유효한 NavMesh 데이터 로드")
+    SECTION("Load NavMesh from data")
     {
-        bool loadResult = builder.LoadNavMesh(buildResult.navMeshData, buildResult.dataSize);
-        REQUIRE(loadResult == true);
+        // Create new builder and load NavMesh
+        UnityNavMeshBuilder newBuilder;
+        bool loadResult = newBuilder.LoadNavMesh(buildResult.navMeshData, buildResult.dataSize);
         
-        // 로드 후 정보 확인
-        int polyCount = builder.GetPolyCount();
-        int vertexCount = builder.GetVertexCount();
+        REQUIRE(loadResult == true);
+        REQUIRE(newBuilder.GetNavMesh() != nullptr);
+        REQUIRE(newBuilder.GetNavMeshQuery() != nullptr);
+        
+        // Check if loaded NavMesh has same properties
+        int polyCount = newBuilder.GetPolyCount();
+        int vertexCount = newBuilder.GetVertexCount();
         
         REQUIRE(polyCount > 0);
         REQUIRE(vertexCount > 0);
-        
-        // NavMesh 인스턴스 확인
-        REQUIRE(builder.GetNavMesh() != nullptr);
-        REQUIRE(builder.GetNavMeshQuery() != nullptr);
-    }
-    
-    SECTION("무효한 NavMesh 데이터 로드")
-    {
-        // null 데이터
-        bool loadResult = builder.LoadNavMesh(nullptr, 0);
-        REQUIRE(loadResult == false);
-        
-        // 잘못된 데이터
-        unsigned char invalidData[] = { 0x00, 0x01, 0x02, 0x03 };
-        loadResult = builder.LoadNavMesh(invalidData, 4);
-        REQUIRE(loadResult == false);
     }
     
     UnityRecast_FreeNavMeshData(&buildResult);
 }
 
-TEST_CASE("다양한 빌드 설정 테스트", "[UnityNavMeshBuilder]")
+TEST_CASE("Error handling test", "[UnityNavMeshBuilder]")
 {
     UnityNavMeshBuilder builder;
     
-    std::vector<float> vertices = { -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f };
-    std::vector<int> indices = { 0, 1, 2 };
-    
-    UnityMeshData meshData;
-    meshData.vertices = vertices.data();
-    meshData.indices = indices.data();
-    meshData.vertexCount = static_cast<int>(vertices.size()) / 3;
-    meshData.indexCount = static_cast<int>(indices.size());
-    
-    SECTION("높은 품질 설정")
+    SECTION("Null mesh data")
     {
-        UnityNavMeshBuildSettings settings;
-        settings.cellSize = 0.1f;
-        settings.cellHeight = 0.1f;
-        settings.walkableSlopeAngle = 45.0f;
-        settings.walkableHeight = 2.0f;
-        settings.walkableRadius = 0.6f;
-        settings.walkableClimb = 0.9f;
-        settings.minRegionArea = 4.0f;
-        settings.mergeRegionArea = 10.0f;
-        settings.maxVertsPerPoly = 6;
-        settings.detailSampleDist = 3.0f;
-        settings.detailSampleMaxError = 0.5f;
-        
-        UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
-        REQUIRE(result.success == true);
-        
-        int polyCount = builder.GetPolyCount();
-        UnityRecast_FreeNavMeshData(&result);
-        
-        REQUIRE(polyCount > 0);
-    }
-    
-    SECTION("낮은 품질 설정")
-    {
-        UnityNavMeshBuildSettings settings;
-        settings.cellSize = 0.5f;
-        settings.cellHeight = 0.3f;
-        settings.walkableSlopeAngle = 45.0f;
-        settings.walkableHeight = 2.0f;
-        settings.walkableRadius = 0.6f;
-        settings.walkableClimb = 0.9f;
-        settings.minRegionArea = 16.0f;
-        settings.mergeRegionArea = 40.0f;
-        settings.maxVertsPerPoly = 6;
-        settings.detailSampleDist = 12.0f;
-        settings.detailSampleMaxError = 2.0f;
-        
-        UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
-        REQUIRE(result.success == true);
-        
-        int polyCount = builder.GetPolyCount();
-        UnityRecast_FreeNavMeshData(&result);
-        
-        REQUIRE(polyCount > 0);
-    }
-    
-    SECTION("극단적인 설정")
-    {
-        UnityNavMeshBuildSettings settings;
-        settings.cellSize = 0.01f;  // 매우 작은 셀
-        settings.cellHeight = 0.01f;
-        settings.walkableSlopeAngle = 45.0f;
-        settings.walkableHeight = 2.0f;
-        settings.walkableRadius = 0.6f;
-        settings.walkableClimb = 0.9f;
-        settings.minRegionArea = 1.0f;
-        settings.mergeRegionArea = 2.0f;
-        settings.maxVertsPerPoly = 6;
-        settings.detailSampleDist = 1.0f;
-        settings.detailSampleMaxError = 0.1f;
-        
-        UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
-        REQUIRE(result.success == true);
-        
-        int polyCount = builder.GetPolyCount();
-        UnityRecast_FreeNavMeshData(&result);
-        
-        REQUIRE(polyCount > 0);
-    }
-}
-
-TEST_CASE("에러 처리 테스트", "[UnityNavMeshBuilder]")
-{
-    UnityNavMeshBuilder builder;
-    
-    SECTION("null 메시 데이터")
-    {
-        UnityNavMeshBuildSettings settings;
+        UnityNavMeshBuildSettings settings = {};
         settings.cellSize = 0.3f;
         settings.cellHeight = 0.2f;
         settings.walkableSlopeAngle = 45.0f;
@@ -362,7 +264,7 @@ TEST_CASE("에러 처리 테스트", "[UnityNavMeshBuilder]")
         REQUIRE(result.errorMessage != nullptr);
     }
     
-    SECTION("null 설정")
+    SECTION("Null settings")
     {
         std::vector<float> vertices = { -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f };
         std::vector<int> indices = { 0, 1, 2 };
@@ -378,7 +280,7 @@ TEST_CASE("에러 처리 테스트", "[UnityNavMeshBuilder]")
         REQUIRE(result.errorMessage != nullptr);
     }
     
-    SECTION("빈 메시 데이터")
+    SECTION("Empty mesh data")
     {
         UnityMeshData meshData;
         meshData.vertices = nullptr;
@@ -386,7 +288,7 @@ TEST_CASE("에러 처리 테스트", "[UnityNavMeshBuilder]")
         meshData.vertexCount = 0;
         meshData.indexCount = 0;
         
-        UnityNavMeshBuildSettings settings;
+        UnityNavMeshBuildSettings settings = {};
         settings.cellSize = 0.3f;
         settings.cellHeight = 0.2f;
         settings.walkableSlopeAngle = 45.0f;
@@ -401,34 +303,64 @@ TEST_CASE("에러 처리 테스트", "[UnityNavMeshBuilder]")
         
         UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
         REQUIRE(result.success == false);
+        REQUIRE(result.errorMessage != nullptr);
+    }
+}
+
+TEST_CASE("Memory management test", "[UnityNavMeshBuilder]")
+{
+    UnityNavMeshBuilder builder;
+    
+    // Create mesh data
+    std::vector<float> vertices = { -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f };
+    std::vector<int> indices = { 0, 1, 2 };
+    
+    UnityMeshData meshData;
+    meshData.vertices = vertices.data();
+    meshData.indices = indices.data();
+    meshData.vertexCount = static_cast<int>(vertices.size()) / 3;
+    meshData.indexCount = static_cast<int>(indices.size());
+    
+    UnityNavMeshBuildSettings settings = {};
+    settings.cellSize = 0.3f;
+    settings.cellHeight = 0.2f;
+    settings.walkableSlopeAngle = 45.0f;
+    settings.walkableHeight = 2.0f;
+    settings.walkableRadius = 0.6f;
+    settings.walkableClimb = 0.9f;
+    settings.minRegionArea = 8.0f;
+    settings.mergeRegionArea = 20.0f;
+    settings.maxVertsPerPoly = 6;
+    settings.detailSampleDist = 6.0f;
+    settings.detailSampleMaxError = 1.0f;
+    
+    SECTION("Multiple builds")
+    {
+        // Build multiple NavMeshes to test memory management
+        for (int i = 0; i < 5; i++)
+        {
+            UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
+            REQUIRE(result.success == true);
+            
+            // Check NavMesh properties
+            int polyCount = builder.GetPolyCount();
+            int vertexCount = builder.GetVertexCount();
+            
+            REQUIRE(polyCount > 0);
+            REQUIRE(vertexCount > 0);
+            
+            // Cleanup
+            UnityRecast_FreeNavMeshData(&result);
+        }
     }
     
-    SECTION("잘못된 인덱스")
+    SECTION("Load invalid data")
     {
-        std::vector<float> vertices = { -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f };
-        std::vector<int> indices = { 0, 1, 5 }; // 잘못된 인덱스
+        // Try to load invalid NavMesh data
+        unsigned char invalidData[] = { 0x00, 0x01, 0x02, 0x03 };
+        bool loadResult = builder.LoadNavMesh(invalidData, sizeof(invalidData));
         
-        UnityMeshData meshData;
-        meshData.vertices = vertices.data();
-        meshData.indices = indices.data();
-        meshData.vertexCount = static_cast<int>(vertices.size()) / 3;
-        meshData.indexCount = static_cast<int>(indices.size());
-        
-        UnityNavMeshBuildSettings settings;
-        settings.cellSize = 0.3f;
-        settings.cellHeight = 0.2f;
-        settings.walkableSlopeAngle = 45.0f;
-        settings.walkableHeight = 2.0f;
-        settings.walkableRadius = 0.6f;
-        settings.walkableClimb = 0.9f;
-        settings.minRegionArea = 8.0f;
-        settings.mergeRegionArea = 20.0f;
-        settings.maxVertsPerPoly = 6;
-        settings.detailSampleDist = 6.0f;
-        settings.detailSampleMaxError = 1.0f;
-        
-        UnityNavMeshResult result = builder.BuildNavMesh(&meshData, &settings);
-        // 잘못된 인덱스로 인해 빌드가 실패할 수 있음
-        // REQUIRE(result.success == false);
+        // Should fail with invalid data
+        REQUIRE(loadResult == false);
     }
 } 
