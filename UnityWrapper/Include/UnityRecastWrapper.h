@@ -19,12 +19,37 @@ extern "C" {
     UNITY_API bool UnityRecast_Initialize();
     UNITY_API void UnityRecast_Cleanup();
     
+    // 좌표계 변환 설정
+    enum UnityCoordinateSystem {
+        UNITY_COORD_LEFT_HANDED = 0,    // Unity 기본 (왼손 좌표계)
+        UNITY_COORD_RIGHT_HANDED = 1    // RecastNavigation 기본 (오른손 좌표계)
+    };
+    
+    // Y축 회전 설정
+    enum UnityYAxisRotation {
+        UNITY_Y_ROTATION_NONE = 0,      // 회전 없음
+        UNITY_Y_ROTATION_90 = 1,        // Y축 기준 90도 회전
+        UNITY_Y_ROTATION_180 = 2,       // Y축 기준 180도 회전
+        UNITY_Y_ROTATION_270 = 3        // Y축 기준 270도 회전
+    };
+    
+    UNITY_API void UnityRecast_SetCoordinateSystem(UnityCoordinateSystem system);
+    UNITY_API UnityCoordinateSystem UnityRecast_GetCoordinateSystem();
+    UNITY_API void UnityRecast_SetYAxisRotation(UnityYAxisRotation rotation);
+    UNITY_API UnityYAxisRotation UnityRecast_GetYAxisRotation();
+    
+    // 좌표 변환 함수들
+    UNITY_API void UnityRecast_TransformVertex(float* x, float* y, float* z);
+    UNITY_API void UnityRecast_TransformPathPoint(float* x, float* y, float* z);
+    UNITY_API void UnityRecast_TransformPathPoints(float* points, int pointCount);
+    
     // 메시 데이터 구조체
     struct UnityMeshData {
         float* vertices;      // 3D 정점 배열 (x, y, z)
         int* indices;         // 삼각형 인덱스 배열
         int vertexCount;      // 정점 개수
         int indexCount;       // 인덱스 개수
+        bool transformCoordinates; // 좌표 변환 여부
     };
     
     // NavMesh 빌드 설정
@@ -40,6 +65,7 @@ extern "C" {
         int maxVertsPerPoly;      // 폴리곤당 최대 정점 수
         float detailSampleDist;   // 상세 샘플링 거리
         float detailSampleMaxError; // 상세 샘플링 최대 오차
+        bool autoTransformCoordinates; // 자동 좌표 변환
     };
     
     // NavMesh 빌드 결과

@@ -3,11 +3,79 @@
 #include "UnityPathfinding.h"
 #include <memory>
 #include <cstring>
+#include <cmath>
 
 // 전역 인스턴스
 static std::unique_ptr<UnityNavMeshBuilder> g_navMeshBuilder;
 static std::unique_ptr<UnityPathfinding> g_pathfinding;
 static bool g_initialized = false;
+static UnityCoordinateSystem g_coordinateSystem = UNITY_COORD_LEFT_HANDED;
+static UnityYAxisRotation g_yAxisRotation = UNITY_Y_ROTATION_NONE;
+
+// 좌표 변환 함수들
+static void TransformVertex(float* x, float* y, float* z) {
+    // Y축 회전 적용
+    float originalX = *x;
+    float originalZ = *z;
+    
+    switch (g_yAxisRotation) {
+        case UNITY_Y_ROTATION_90:
+            *x = -originalZ;
+            *z = originalX;
+            break;
+        case UNITY_Y_ROTATION_180:
+            *x = -originalX;
+            *z = -originalZ;
+            break;
+        case UNITY_Y_ROTATION_270:
+            *x = originalZ;
+            *z = -originalX;
+            break;
+        case UNITY_Y_ROTATION_NONE:
+        default:
+            // 회전 없음
+            break;
+    }
+    
+    // 좌표계 변환 적용
+    if (g_coordinateSystem == UNITY_COORD_LEFT_HANDED) {
+        // Unity (왼손 좌표계) -> RecastNavigation (오른손 좌표계)
+        // Z축 방향을 반전
+        *z = -*z;
+    }
+}
+
+static void TransformPathPoint(float* x, float* y, float* z) {
+    // 좌표계 변환 적용 (역변환)
+    if (g_coordinateSystem == UNITY_COORD_LEFT_HANDED) {
+        // RecastNavigation (오른손 좌표계) -> Unity (왼손 좌표계)
+        // Z축 방향을 반전
+        *z = -*z;
+    }
+    
+    // Y축 회전 적용 (역변환)
+    float originalX = *x;
+    float originalZ = *z;
+    
+    switch (g_yAxisRotation) {
+        case UNITY_Y_ROTATION_90:
+            *x = originalZ;
+            *z = -originalX;
+            break;
+        case UNITY_Y_ROTATION_180:
+            *x = -originalX;
+            *z = -originalZ;
+            break;
+        case UNITY_Y_ROTATION_270:
+            *x = -originalZ;
+            *z = originalX;
+            break;
+        case UNITY_Y_ROTATION_NONE:
+        default:
+            // 회전 없음
+            break;
+    }
+}
 
 extern "C" {
 
@@ -33,6 +101,47 @@ UNITY_API void UnityRecast_Cleanup() {
     g_initialized = false;
 }
 
+UNITY_API void UnityRecast_SetCoordinateSystem(UnityCoordinateSystem system) {
+    g_coordinateSystem = system;
+}
+
+UNITY_API UnityCoordinateSystem UnityRecast_GetCoordinateSystem() {
+    return g_coordinateSystem;
+}
+
+UNITY_API void UnityRecast_SetYAxisRotation(UnityYAxisRotation rotation) {
+    g_yAxisRotation = rotation;
+}
+
+UNITY_API UnityYAxisRotation UnityRecast_GetYAxisRotation() {
+    return g_yAxisRotation;
+}
+
+UNITY_API void UnityRecast_TransformVertex(float* x, float* y, float* z) {
+    if (x && y && z) {
+        TransformVertex(x, y, z);
+    }
+}
+
+UNITY_API void UnityRecast_TransformPathPoint(float* x, float* y, float* z) {
+    if (x && y && z) {
+        TransformPathPoint(x, y, z);
+    }
+}
+
+UNITY_API void UnityRecast_TransformPathPoints(float* points, int pointCount) {
+    if (!points || pointCount <= 0) {
+        return;
+    }
+    
+    for (int i = 0; i < pointCount; ++i) {
+        float* x = &points[i * 3];
+        float* y = &points[i * 3 + 1];
+        float* z = &points[i * 3 + 2];
+        TransformPathPoint(x, y, z);
+    }
+}
+
 UNITY_API UnityNavMeshResult UnityRecast_BuildNavMesh(
     const UnityMeshData* meshData,
     const UnityNavMeshBuildSettings* settings
@@ -52,7 +161,27 @@ UNITY_API UnityNavMeshResult UnityRecast_BuildNavMesh(
     }
     
     try {
-        result = g_navMeshBuilder->BuildNavMesh(meshData, settings);
+        // 좌표 변환이 필요한 경우 메시 데이터 복사 및 변환
+        UnityMeshData transformedMeshData = *meshData;
+        std::vector<float> transformedVertices;
+        
+        if (settings->autoTransformCoordinates || meshData->transformCoordinates) {
+            transformedVertices.resize(meshData->vertexCount * 3);
+            std::memcpy(transformedVertices.data(), meshData->vertices, meshData->vertexCount * 3 * sizeof(float));
+            
+            // 모든 정점에 좌표 변환 적용
+            for (int i = 0; i < meshData->vertexCount; ++i) {
+                float* x = &transformedVertices[i * 3];
+                float* y = &transformedVertices[i * 3 + 1];
+                float* z = &transformedVertices[i * 3 + 2];
+                TransformVertex(x, y, z);
+            }
+            
+            transformedMeshData.vertices = transformedVertices.data();
+            transformedMeshData.transformCoordinates = false; // 이미 변환됨
+        }
+        
+        result = g_navMeshBuilder->BuildNavMesh(&transformedMeshData, settings);
         
         if (result.success) {
             // NavMesh가 성공적으로 빌드되면 Pathfinding에 설정
@@ -127,7 +256,16 @@ UNITY_API UnityPathResult UnityRecast_FindPath(
     }
     
     try {
+        // 시작점과 끝점을 RecastNavigation 좌표계로 변환
+        TransformVertex(&startX, &startY, &startZ);
+        TransformVertex(&endX, &endY, &endZ);
+        
         result = g_pathfinding->FindPath(startX, startY, startZ, endX, endY, endZ);
+        
+        // 경로 결과를 Unity 좌표계로 변환
+        if (result.success && result.pathPoints) {
+            UnityRecast_TransformPathPoints(result.pathPoints, result.pointCount);
+        }
     }
     catch (const std::exception& e) {
         result.success = false;

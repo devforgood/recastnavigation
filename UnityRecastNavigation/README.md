@@ -13,6 +13,8 @@ Unity3D에서 RecastNavigation을 사용할 수 있는 통합 솔루션입니다
 - **에디터 도구**: Unity 에디터에서 직접 NavMesh 빌드 및 테스트
 - **런타임 컴포넌트**: 게임 실행 중 NavMesh 사용 및 경로 찾기
 - **설정 가이드**: 단계별 설정 가이드 및 자동 설정 도구
+- **좌표계 변환**: Unity와 RecastNavigation 간의 자동 좌표 변환
+- **Y축 회전**: 메시 방향성 조정을 위한 Y축 회전 지원
 
 ## 파일 구조
 
@@ -170,6 +172,184 @@ var highQualitySettings = NavMeshBuildSettingsExtensions.CreateHighQuality();
 var lowQualitySettings = NavMeshBuildSettingsExtensions.CreateLowQuality();
 ```
 
+## 좌표계 변환
+
+Unity와 RecastNavigation은 서로 다른 좌표계를 사용하며, 이로 인해 메시 데이터와 경로 찾기 결과에 차이가 발생할 수 있습니다. 이 패키지는 이러한 차이를 자동으로 보정하는 기능을 제공합니다.
+
+### 좌표계 차이점
+
+#### Unity 좌표계 (왼손 좌표계)
+```
+Y축: 위쪽 (Up)     → +Y
+X축: 오른쪽 (Right) → +X  
+Z축: 앞쪽 (Forward) → +Z
+```
+
+#### RecastNavigation 좌표계 (오른손 좌표계)
+```
+Y축: 위쪽 (Up)     → +Y
+X축: 오른쪽 (Right) → +X
+Z축: 앞쪽 (Forward) → +Z
+```
+
+### 좌표계 변환의 필요성
+
+1. **메시 데이터 방향성**: Unity에서 내보낸 메시의 정점 순서와 면의 방향이 RecastNavigation에서 다르게 해석될 수 있습니다.
+
+2. **경로 찾기 결과**: 경로 찾기 결과의 좌표가 Unity 월드 좌표계와 맞지 않을 수 있습니다.
+
+3. **메시 UV 매핑**: 메시의 UV 좌표와 노멀 방향이 좌표계 차이로 인해 잘못 해석될 수 있습니다.
+
+### 자동 좌표 변환 기능
+
+#### 1. 좌표계 설정
+
+```csharp
+// 좌표계 타입 설정
+public enum CoordinateSystem
+{
+    LeftHanded = 0,   // Unity (왼손 좌표계)
+    RightHanded = 1   // RecastNavigation (오른손 좌표계)
+}
+
+// 좌표계 설정
+RecastNavigationWrapper.UnityRecast_SetCoordinateSystem(CoordinateSystem.LeftHanded);
+```
+
+#### 2. 자동 변환 활성화
+
+```csharp
+// 컴포넌트에서 자동 좌표 변환 활성화
+var component = GetComponent<RecastNavigationComponent>();
+component.SetAutoTransformCoordinates(true);
+
+// 또는 개별 설정
+RecastNavigationWrapper.UnityRecast_SetAutoTransformCoordinates(true);
+```
+
+#### 3. 수동 좌표 변환
+
+```csharp
+// Unity 좌표를 RecastNavigation 좌표로 변환
+Vector3 unityPosition = new Vector3(1, 2, 3);
+Vector3 recastPosition = RecastNavigationWrapper.TransformPosition(unityPosition);
+
+// RecastNavigation 좌표를 Unity 좌표로 변환
+Vector3 unityPos = RecastNavigationWrapper.InverseTransformPosition(recastPosition);
+```
+
+### Y축 회전 보정
+
+메시의 방향성이 Unity와 RecastNavigation에서 다르게 해석될 때 Y축 회전을 사용하여 보정할 수 있습니다.
+
+#### Y축 회전 타입
+
+```csharp
+public enum YAxisRotation
+{
+    None = 0,      // 회전 없음
+    Rotate90 = 1,  // Y축 기준 90도 시계방향 회전
+    Rotate180 = 2, // Y축 기준 180도 회전
+    Rotate270 = 3  // Y축 기준 270도 시계방향 회전 (90도 반시계방향)
+}
+```
+
+#### Y축 회전 사용법
+
+```csharp
+// Y축 회전 설정
+RecastNavigationWrapper.UnityRecast_SetYAxisRotation(YAxisRotation.Rotate90);
+
+// 컴포넌트에서 설정
+component.SetYAxisRotation(YAxisRotation.Rotate90);
+
+// 개별 좌표에 Y축 회전 적용
+Vector3 originalPosition = new Vector3(1, 2, 3);
+Vector3 rotatedPosition = RecastNavigationWrapper.ApplyYAxisRotation(originalPosition, YAxisRotation.Rotate90);
+```
+
+### Y축 회전이 필요한 경우
+
+1. **메시의 정면 방향이 다를 때**: 
+   - Unity에서는 Z축이 앞쪽이지만, 일부 3D 모델링 도구나 메시 데이터에서는 다른 방향을 정면으로 사용
+   - 예: Blender에서 내보낸 메시가 Unity와 방향이 다를 때
+
+2. **메시의 UV 매핑이나 노멀 방향이 다를 때**:
+   - 메시의 표면 방향이 Unity와 RecastNavigation에서 다르게 해석
+   - 텍스처 매핑이나 라이팅이 잘못 적용될 때
+
+3. **특정 게임 엔진이나 도구에서 내보낸 메시**:
+   - 다른 게임 엔진에서 내보낸 메시 데이터의 경우 좌표계가 다를 수 있음
+   - 예: Unreal Engine, 3ds Max, Maya 등에서 내보낸 메시
+
+### 좌표계 변환 설정 예제
+
+```csharp
+public class CoordinateSystemExample : MonoBehaviour
+{
+    void Start()
+    {
+        // 1. 좌표계 설정
+        RecastNavigationWrapper.UnityRecast_SetCoordinateSystem(CoordinateSystem.LeftHanded);
+        
+        // 2. Y축 회전 설정 (필요한 경우)
+        RecastNavigationWrapper.UnityRecast_SetYAxisRotation(YAxisRotation.Rotate90);
+        
+        // 3. 자동 좌표 변환 활성화
+        RecastNavigationWrapper.UnityRecast_SetAutoTransformCoordinates(true);
+        
+        // 4. NavMesh 빌드
+        var component = GetComponent<RecastNavigationComponent>();
+        component.BuildNavMeshFromScene();
+    }
+    
+    void TestCoordinateTransform()
+    {
+        Vector3 unityPos = new Vector3(10, 5, 15);
+        
+        // Unity → RecastNavigation 변환
+        Vector3 recastPos = RecastNavigationWrapper.TransformPosition(unityPos);
+        Debug.Log($"Unity: {unityPos} → Recast: {recastPos}");
+        
+        // RecastNavigation → Unity 변환
+        Vector3 backToUnity = RecastNavigationWrapper.InverseTransformPosition(recastPos);
+        Debug.Log($"Recast: {recastPos} → Unity: {backToUnity}");
+    }
+}
+```
+
+### 문제 해결 가이드
+
+#### 좌표계 문제 진단
+
+1. **경로가 잘못된 방향으로 생성되는 경우**:
+   - Y축 회전 설정 확인
+   - `YAxisRotation.Rotate90` 또는 `YAxisRotation.Rotate270` 시도
+
+2. **메시가 거꾸로 렌더링되는 경우**:
+   - 좌표계 설정 확인
+   - `CoordinateSystem.RightHanded`로 변경 시도
+
+3. **NavMesh가 메시와 맞지 않는 경우**:
+   - 자동 좌표 변환 활성화 확인
+   - 수동 좌표 변환 함수 사용
+
+#### 디버그 도구
+
+```csharp
+// 좌표계 변환 디버그 정보 출력
+RecastNavigationWrapper.UnityRecast_EnableDebugLogging(true);
+
+// 현재 설정 확인
+var coordSystem = RecastNavigationWrapper.UnityRecast_GetCoordinateSystem();
+var yRotation = RecastNavigationWrapper.UnityRecast_GetYAxisRotation();
+var autoTransform = RecastNavigationWrapper.UnityRecast_GetAutoTransformCoordinates();
+
+Debug.Log($"Coordinate System: {coordSystem}");
+Debug.Log($"Y-Axis Rotation: {yRotation}");
+Debug.Log($"Auto Transform: {autoTransform}");
+```
+
 ## 예제 시나리오
 
 ### 1. 간단한 경로 찾기
@@ -181,6 +361,10 @@ public class SimplePathfinding : MonoBehaviour
     {
         // 초기화
         RecastNavigationWrapper.Initialize();
+        
+        // 좌표계 설정
+        RecastNavigationWrapper.UnityRecast_SetCoordinateSystem(CoordinateSystem.LeftHanded);
+        RecastNavigationWrapper.UnityRecast_SetAutoTransformCoordinates(true);
         
         // 현재 씬의 모든 Mesh로 NavMesh 빌드
         var navComponent = gameObject.AddComponent<RecastNavigationComponent>();
@@ -256,6 +440,46 @@ public class AgentMovement : MonoBehaviour
 }
 ```
 
+### 3. 좌표계 변환 테스트
+
+```csharp
+public class CoordinateTransformTest : MonoBehaviour
+{
+    void Start()
+    {
+        // 좌표계 변환 테스트
+        TestCoordinateTransformation();
+    }
+    
+    void TestCoordinateTransformation()
+    {
+        Vector3 originalPos = new Vector3(10, 5, 15);
+        
+        // Unity → RecastNavigation 변환
+        Vector3 recastPos = RecastNavigationWrapper.TransformPosition(originalPos);
+        Debug.Log($"Original Unity Position: {originalPos}");
+        Debug.Log($"Transformed to Recast: {recastPos}");
+        
+        // RecastNavigation → Unity 변환
+        Vector3 backToUnity = RecastNavigationWrapper.InverseTransformPosition(recastPos);
+        Debug.Log($"Back to Unity: {backToUnity}");
+        
+        // 변환 정확도 확인
+        float error = Vector3.Distance(originalPos, backToUnity);
+        Debug.Log($"Transformation Error: {error}");
+        
+        if (error < 0.001f)
+        {
+            Debug.Log("✅ 좌표계 변환이 정확합니다!");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ 좌표계 변환에 오차가 있습니다.");
+        }
+    }
+}
+```
+
 ## 테스트
 
 ### Unity 테스트 실행
@@ -276,6 +500,8 @@ Unity 프로젝트에서 NUnit 테스트를 실행할 수 있습니다:
 - **경로 찾기**: 다양한 시나리오에서 경로 찾기
 - **정보 조회**: 폴리곤 수, 정점 수 조회
 - **성능 테스트**: 빌드 및 경로 찾기 성능
+- **좌표계 변환**: 좌표 변환 함수 테스트
+- **Y축 회전**: Y축 회전 기능 테스트
 
 ### 테스트 실행 방법
 
@@ -340,6 +566,11 @@ void OnDestroy()
    - NavMesh가 올바르게 빌드되었는지 확인
    - 시작점과 끝점이 NavMesh 내부에 있는지 확인
 
+5. **좌표계 문제**
+   - 좌표계 설정 확인
+   - Y축 회전 설정 확인
+   - 자동 좌표 변환 활성화 확인
+
 ### 디버그 도구
 
 - **Quick Tool**: `Tools > RecastNavigation > Quick Tool`
@@ -350,6 +581,8 @@ void OnDestroy()
 - **Console 로그**: Unity 콘솔에서 상세한 에러 메시지 확인
 
 - **테스트 실행**: Test Runner에서 테스트를 실행하여 기능 확인
+
+- **좌표계 디버그**: 좌표계 변환 디버그 정보 출력
 
 ## 라이선스
 

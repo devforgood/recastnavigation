@@ -6,6 +6,9 @@ using System.Collections.Generic;
 
 namespace RecastNavigation.Editor
 {
+    /// <summary>
+    /// RecastNavigation 에디터 도구
+    /// </summary>
     public class RecastNavigationEditor : EditorWindow
     {
         private Vector2 scrollPosition;
@@ -38,6 +41,11 @@ namespace RecastNavigation.Editor
         private bool autoRebuildOnSceneChange = false;
         private bool saveNavMeshToFile = false;
         private string savePath = "Assets/NavMeshData/";
+        
+        private bool autoTransformCoordinates = true;
+        private CoordinateSystem coordinateSystem = CoordinateSystem.LeftHanded;
+        private string loadPath = "";
+        private bool showAdvancedSettings = false;
         
         [MenuItem("Tools/RecastNavigation/Editor")]
         public static void ShowWindow()
@@ -78,6 +86,21 @@ namespace RecastNavigation.Editor
             // 헤더
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("RecastNavigation Editor", EditorStyles.boldLabel);
+            EditorGUILayout.Space();
+            
+            // 좌표계 설정
+            EditorGUILayout.LabelField("좌표계 설정", EditorStyles.boldLabel);
+            coordinateSystem = (CoordinateSystem)EditorGUILayout.EnumPopup("좌표계", coordinateSystem);
+            autoTransformCoordinates = EditorGUILayout.Toggle("자동 좌표 변환", autoTransformCoordinates);
+            
+            if (autoTransformCoordinates)
+            {
+                EditorGUILayout.HelpBox(
+                    "Unity (왼손 좌표계)와 RecastNavigation (오른손 좌표계) 간의 좌표 변환이 자동으로 수행됩니다.\n" +
+                    "Z축 방향이 반전됩니다.", 
+                    MessageType.Info);
+            }
+            
             EditorGUILayout.Space();
             
             // 상태 표시
