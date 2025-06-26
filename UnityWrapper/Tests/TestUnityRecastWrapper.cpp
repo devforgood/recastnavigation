@@ -35,11 +35,11 @@ TEST_CASE("Build NavMesh with simple mesh", "[UnityRecastWrapper]")
 {
     REQUIRE(UnityRecast_Initialize());
     
-    // 메시를 2x2 그리드로 분할 (총 8개 삼각형, 9개 정점)
+    // 메시를 2x2 그리드로 분할하고 높이 차이 추가 (총 8개 삼각형, 9개 정점)
     std::vector<float> vertices = {
-        -2.0f, 0.0f, -2.0f,   0.0f, 0.0f, -2.0f,   2.0f, 0.0f, -2.0f,
-        -2.0f, 0.0f,  0.0f,   0.0f, 0.0f,  0.0f,   2.0f, 0.0f,  0.0f,
-        -2.0f, 0.0f,  2.0f,   0.0f, 0.0f,  2.0f,   2.0f, 0.0f,  2.0f
+        -2.0f, 0.0f, -2.0f,   0.0f, 0.1f, -2.0f,   2.0f, 0.0f, -2.0f,
+        -2.0f, 0.0f,  0.0f,   0.0f, 0.2f,  0.0f,   2.0f, 0.0f,  0.0f,
+        -2.0f, 0.0f,  2.0f,   0.0f, 0.1f,  2.0f,   2.0f, 0.0f,  2.0f
     };
     std::vector<int> indices = {
         0,1,3, 1,4,3, 1,2,4, 2,5,4,
@@ -53,17 +53,17 @@ TEST_CASE("Build NavMesh with simple mesh", "[UnityRecastWrapper]")
     meshData.indexCount = static_cast<int>(indices.size());
     
     UnityNavMeshBuildSettings settings = {};
-    settings.cellSize = 0.2f;
-    settings.cellHeight = 0.1f;
+    settings.cellSize = 0.1f;           // 더 작게
+    settings.cellHeight = 0.05f;        // 더 작게
     settings.walkableSlopeAngle = 45.0f;
-    settings.walkableHeight = 0.2f;
-    settings.walkableRadius = 0.1f;
-    settings.walkableClimb = 0.1f;
-    settings.minRegionArea = 2.0f;
-    settings.mergeRegionArea = 2.0f;
+    settings.walkableHeight = 0.1f;     // 더 작게
+    settings.walkableRadius = 0.0f;    // erosion 비활성화
+    settings.walkableClimb = 0.05f;     // 더 작게
+    settings.minRegionArea = 1.0f;      // 더 작게
+    settings.mergeRegionArea = 1.0f;    // 더 작게
     settings.maxVertsPerPoly = 6;
-    settings.detailSampleDist = 2.0f;
-    settings.detailSampleMaxError = 0.5f;
+    settings.detailSampleDist = 1.0f;   // 더 작게
+    settings.detailSampleMaxError = 0.1f; // 더 작게
     
     SECTION("NavMesh build success")
     {

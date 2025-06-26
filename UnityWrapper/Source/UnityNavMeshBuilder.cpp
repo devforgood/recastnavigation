@@ -259,8 +259,11 @@ bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSetting
         return false;
     }
     
-    if (!rcErodeWalkableArea(m_ctx.get(), settings->walkableRadius, *m_chf)) {
-        return false;
+    // walkableRadius가 0보다 클 때만 erosion 수행
+    if (settings->walkableRadius > 0.0f) {
+        if (!rcErodeWalkableArea(m_ctx.get(), settings->walkableRadius, *m_chf)) {
+            return false;
+        }
     }
     
     if (!rcBuildDistanceField(m_ctx.get(), *m_chf)) {
