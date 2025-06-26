@@ -26,10 +26,12 @@ namespace RecastNavigation
         [SerializeField] private bool drawPath = true;
         [SerializeField] private Color navMeshColor = Color.green;
         [SerializeField] private Color pathColor = Color.red;
+        [SerializeField] private bool autoAddGizmo = true;
 
         private byte[] navMeshData;
         private bool isInitialized = false;
         private List<Vector3> currentPath = new List<Vector3>();
+        private NavMeshGizmo navMeshGizmo;
 
         // 이벤트
         public System.Action<Vector3[]> OnPathFound;
@@ -46,6 +48,12 @@ namespace RecastNavigation
         private void Awake()
         {
             InitializeRecastNavigation();
+            
+            // NavMeshGizmo 자동 추가
+            if (autoAddGizmo)
+            {
+                AddNavMeshGizmo();
+            }
         }
 
         private void Update()
@@ -182,6 +190,67 @@ namespace RecastNavigation
             catch (System.Exception e)
             {
                 Debug.LogError($"RecastNavigation 정리 중 오류: {e.Message}");
+            }
+        }
+
+        #endregion
+
+        #region NavMeshGizmo 관리
+
+        /// <summary>
+        /// NavMeshGizmo 컴포넌트 추가
+        /// </summary>
+        public void AddNavMeshGizmo()
+        {
+            if (navMeshGizmo != null) return;
+
+            navMeshGizmo = GetComponent<NavMeshGizmo>();
+            if (navMeshGizmo == null)
+            {
+                navMeshGizmo = gameObject.AddComponent<NavMeshGizmo>();
+                Debug.Log("NavMeshGizmo 컴포넌트가 추가되었습니다.");
+            }
+        }
+
+        /// <summary>
+        /// NavMeshGizmo 컴포넌트 제거
+        /// </summary>
+        public void RemoveNavMeshGizmo()
+        {
+            if (navMeshGizmo != null)
+            {
+                DestroyImmediate(navMeshGizmo);
+                navMeshGizmo = null;
+                Debug.Log("NavMeshGizmo 컴포넌트가 제거되었습니다.");
+            }
+        }
+
+        /// <summary>
+        /// NavMeshGizmo 데이터 업데이트
+        /// </summary>
+        public void UpdateNavMeshGizmo()
+        {
+            if (navMeshGizmo != null)
+            {
+                navMeshGizmo.UpdateNavMeshData();
+            }
+        }
+
+        /// <summary>
+        /// NavMeshGizmo 설정
+        /// </summary>
+        /// <param name="showNavMesh">NavMesh 표시 여부</param>
+        /// <param name="showWireframe">와이어프레임 표시 여부</param>
+        /// <param name="showFaces">면 표시 여부</param>
+        /// <param name="showVertices">정점 표시 여부</param>
+        public void ConfigureNavMeshGizmo(bool showNavMesh = true, bool showWireframe = true, bool showFaces = true, bool showVertices = false)
+        {
+            if (navMeshGizmo != null)
+            {
+                navMeshGizmo.SetShowNavMesh(showNavMesh);
+                navMeshGizmo.SetShowWireframe(showWireframe);
+                navMeshGizmo.SetShowFaces(showFaces);
+                navMeshGizmo.SetShowVertices(showVertices);
             }
         }
 
@@ -351,6 +420,10 @@ namespace RecastNavigation
                         RecastNavigationWrapper.UnityRecast_FreeNavMeshData(ref result);
 
                         Debug.Log($"NavMesh 빌드 성공 - 폴리곤: {RecastNavigationWrapper.UnityRecast_GetPolyCount()}, 정점: {RecastNavigationWrapper.UnityRecast_GetVertexCount()}");
+                        
+                        // NavMeshGizmo 업데이트
+                        UpdateNavMeshGizmo();
+                        
                         return true;
                     }
                     else
@@ -400,6 +473,10 @@ namespace RecastNavigation
                 {
                     navMeshData = data;
                     Debug.Log("NavMesh 로드 성공");
+                    
+                    // NavMeshGizmo 업데이트
+                    UpdateNavMeshGizmo();
+                    
                     return true;
                 }
                 else

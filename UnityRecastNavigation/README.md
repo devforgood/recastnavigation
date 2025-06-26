@@ -15,6 +15,7 @@ Unity3D에서 RecastNavigation을 사용할 수 있는 통합 솔루션입니다
 - **설정 가이드**: 단계별 설정 가이드 및 자동 설정 도구
 - **좌표계 변환**: Unity와 RecastNavigation 간의 자동 좌표 변환
 - **Y축 회전**: 메시 방향성 조정을 위한 Y축 회전 지원
+- **NavMesh 시각화**: Unity Scene에서 NavMesh를 기즈모로 시각화
 
 ## 파일 구조
 
@@ -23,10 +24,12 @@ Assets/Scripts/RecastNavigation/
 ├── RecastNavigationWrapper.cs          # DLL 래퍼 클래스
 ├── RecastNavigationComponent.cs        # 런타임 컴포넌트
 ├── RecastNavigationSample.cs           # 사용 예제
+├── NavMeshGizmo.cs                     # NavMesh 시각화 컴포넌트
 └── Editor/
     ├── RecastNavigationEditor.cs       # 메인 에디터 도구
     ├── RecastNavigationQuickTool.cs    # 빠른 도구
-    └── RecastNavigationSetupGuide.cs   # 설정 가이드
+    ├── RecastNavigationSetupGuide.cs   # 설정 가이드
+    └── NavMeshGizmoEditor.cs           # NavMesh 기즈모 에디터
 └── Tests/
     └── RecastNavigationWrapperTests.cs # 유닛 테스트
 ```
@@ -479,6 +482,133 @@ public class CoordinateTransformTest : MonoBehaviour
     }
 }
 ```
+
+### 4. NavMesh 시각화
+
+```csharp
+public class NavMeshVisualizationExample : MonoBehaviour
+{
+    private RecastNavigationComponent navComponent;
+    private NavMeshGizmo navMeshGizmo;
+    
+    void Start()
+    {
+        // RecastNavigation 컴포넌트 추가
+        navComponent = gameObject.AddComponent<RecastNavigationComponent>();
+        
+        // NavMesh 빌드
+        navComponent.BuildNavMeshFromScene();
+        
+        // NavMeshGizmo 자동 추가 (기본적으로 활성화됨)
+        // navComponent.AddNavMeshGizmo();
+        
+        // 또는 수동으로 NavMeshGizmo 설정
+        navComponent.ConfigureNavMeshGizmo(
+            showNavMesh: true,    // NavMesh 표시
+            showWireframe: true,  // 와이어프레임 표시
+            showFaces: true,      // 면 표시
+            showVertices: false   // 정점 표시
+        );
+    }
+    
+    void Update()
+    {
+        // NavMesh 정보 실시간 업데이트
+        if (navMeshGizmo == null)
+        {
+            navMeshGizmo = GetComponent<NavMeshGizmo>();
+        }
+        
+        // 마우스 클릭으로 경로 찾기 및 시각화
+        if (Input.GetMouseButtonDown(0))
+        {
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (Physics.Raycast(ray, out RaycastHit hit))
+            {
+                var result = navComponent.FindPath(transform.position, hit.point);
+                if (result.Success)
+                {
+                    // 경로가 자동으로 기즈모로 표시됨
+                    Debug.Log($"경로 찾기 성공: {result.PathPoints.Length}개 포인트");
+                }
+            }
+        }
+    }
+}
+```
+
+## NavMesh 시각화
+
+Unity Scene에서 NavMesh를 실시간으로 시각화할 수 있는 기능을 제공합니다.
+
+### NavMeshGizmo 컴포넌트
+
+NavMeshGizmo는 Unity Scene에서 NavMesh를 기즈모로 표시하는 컴포넌트입니다.
+
+#### 주요 기능
+
+- **실시간 시각화**: NavMesh가 빌드되거나 로드될 때 자동으로 업데이트
+- **다양한 표시 모드**: 면, 와이어프레임, 정점 선택적 표시
+- **커스터마이징**: 색상, 크기, 투명도 등 완전히 커스터마이징 가능
+- **성능 최적화**: 자동 업데이트 간격 조절로 성능 최적화
+
+#### 사용법
+
+```csharp
+// 1. 자동 추가 (권장)
+var navComponent = gameObject.AddComponent<RecastNavigationComponent>();
+navComponent.BuildNavMeshFromScene(); // NavMeshGizmo가 자동으로 추가됨
+
+// 2. 수동 추가
+var gizmo = gameObject.AddComponent<NavMeshGizmo>();
+gizmo.UpdateNavMeshData();
+
+// 3. 설정 커스터마이징
+gizmo.SetShowNavMesh(true);
+gizmo.SetShowWireframe(true);
+gizmo.SetShowFaces(true);
+gizmo.SetShowVertices(false);
+
+gizmo.SetNavMeshColor(new Color(0.2f, 0.8f, 0.2f, 0.6f));
+gizmo.SetWireframeColor(new Color(0.1f, 0.1f, 0.1f, 1.0f));
+```
+
+#### Inspector 설정
+
+- **시각화 설정**: NavMesh, 와이어프레임, 면, 정점 표시 여부
+- **색상 설정**: 각 요소별 색상 및 투명도
+- **크기 설정**: 정점 크기, 선 두께 등
+- **자동 업데이트**: 업데이트 간격 및 자동 업데이트 여부
+
+#### 에디터 전용 기능
+
+- **Scene 뷰 정보**: NavMesh 정보를 Scene 뷰에 실시간 표시
+- **빠른 설정**: 기본, 와이어프레임만, 면만 등 프리셋 설정
+- **실시간 업데이트**: NavMesh 변경 시 자동으로 기즈모 업데이트
+
+### 시각화 모드
+
+#### 1. 기본 모드
+- NavMesh 면과 와이어프레임 모두 표시
+- 가장 일반적인 사용 모드
+
+#### 2. 와이어프레임 모드
+- NavMesh 구조만 선으로 표시
+- 성능이 좋고 구조 파악에 유용
+
+#### 3. 면 모드
+- NavMesh 면만 표시
+- 이동 가능한 영역을 명확하게 확인
+
+#### 4. 정점 모드
+- NavMesh 정점을 구체로 표시
+- 디버깅 및 정밀한 분석에 유용
+
+### 성능 고려사항
+
+- **큰 NavMesh**: 정점 수가 많은 경우 자동 업데이트 간격을 늘려서 성능 최적화
+- **실시간 업데이트**: 필요하지 않은 경우 자동 업데이트를 비활성화
+- **선택적 표시**: 필요한 요소만 표시하여 렌더링 성능 향상
 
 ## 테스트
 

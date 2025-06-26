@@ -134,6 +134,34 @@ namespace RecastNavigation
         [DllImport(DLL_NAME)]
         private static extern void FreeMemory(IntPtr ptr);
 
+        // 디버그 정보
+        [DllImport(DLL_NAME)]
+        private static extern void UnityRecast_SetDebugDraw(bool enabled);
+
+        [DllImport(DLL_NAME)]
+        private static extern void UnityRecast_GetDebugVertices([Out] float[] vertices, [Out] int vertexCount);
+
+        [DllImport(DLL_NAME)]
+        private static extern void UnityRecast_GetDebugIndices([Out] int[] indices, [Out] int indexCount);
+
+        // 자동 좌표 변환 설정
+        [DllImport(DLL_NAME)]
+        private static extern void UnityRecast_SetAutoTransformCoordinates(bool enabled);
+
+        [DllImport(DLL_NAME)]
+        private static extern bool UnityRecast_GetAutoTransformCoordinates();
+
+        // 디버그 로깅
+        [DllImport(DLL_NAME)]
+        private static extern void UnityRecast_EnableDebugLogging(bool enabled);
+
+        // 현재 설정 가져오기
+        [DllImport(DLL_NAME)]
+        private static extern CoordinateSystem UnityRecast_GetCoordinateSystem();
+
+        [DllImport(DLL_NAME)]
+        private static extern YAxisRotation UnityRecast_GetYAxisRotation();
+
         #endregion
 
         #region Public API
@@ -616,6 +644,184 @@ namespace RecastNavigation
         }
 
         #endregion
+
+        #region NavMesh 디버그 및 시각화
+
+        /// <summary>
+        /// NavMesh 디버그 드로잉 활성화/비활성화
+        /// </summary>
+        /// <param name="enabled">활성화 여부</param>
+        public static void SetDebugDraw(bool enabled)
+        {
+            try
+            {
+                UnityRecast_SetDebugDraw(enabled);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"NavMesh 디버그 드로잉 설정 실패: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// NavMesh 디버그 정점 데이터 가져오기
+        /// </summary>
+        /// <returns>정점 배열</returns>
+        public static Vector3[] GetDebugVertices()
+        {
+            try
+            {
+                int vertexCount = 0;
+                UnityRecast_GetDebugVertices(null, vertexCount);
+                
+                if (vertexCount <= 0)
+                    return new Vector3[0];
+
+                float[] vertices = new float[vertexCount * 3];
+                UnityRecast_GetDebugVertices(vertices, vertexCount);
+
+                Vector3[] result = new Vector3[vertexCount];
+                for (int i = 0; i < vertexCount; i++)
+                {
+                    result[i] = new Vector3(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]);
+                }
+
+                return result;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"NavMesh 디버그 정점 가져오기 실패: {e.Message}");
+                return new Vector3[0];
+            }
+        }
+
+        /// <summary>
+        /// NavMesh 디버그 인덱스 데이터 가져오기
+        /// </summary>
+        /// <returns>인덱스 배열</returns>
+        public static int[] GetDebugIndices()
+        {
+            try
+            {
+                int indexCount = 0;
+                UnityRecast_GetDebugIndices(null, indexCount);
+                
+                if (indexCount <= 0)
+                    return new int[0];
+
+                int[] indices = new int[indexCount];
+                UnityRecast_GetDebugIndices(indices, indexCount);
+
+                return indices;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"NavMesh 디버그 인덱스 가져오기 실패: {e.Message}");
+                return new int[0];
+            }
+        }
+
+        /// <summary>
+        /// NavMesh 디버그 메시 데이터 가져오기
+        /// </summary>
+        /// <returns>디버그 메시 데이터</returns>
+        public static NavMeshDebugData GetDebugMeshData()
+        {
+            Vector3[] vertices = GetDebugVertices();
+            int[] indices = GetDebugIndices();
+
+            return new NavMeshDebugData
+            {
+                Vertices = vertices,
+                Indices = indices,
+                TriangleCount = indices.Length / 3
+            };
+        }
+
+        /// <summary>
+        /// 자동 좌표 변환 설정
+        /// </summary>
+        /// <param name="enabled">활성화 여부</param>
+        public static void SetAutoTransformCoordinates(bool enabled)
+        {
+            try
+            {
+                UnityRecast_SetAutoTransformCoordinates(enabled);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"자동 좌표 변환 설정 실패: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 자동 좌표 변환 상태 가져오기
+        /// </summary>
+        /// <returns>활성화 여부</returns>
+        public static bool GetAutoTransformCoordinates()
+        {
+            try
+            {
+                return UnityRecast_GetAutoTransformCoordinates();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"자동 좌표 변환 상태 가져오기 실패: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 디버그 로깅 활성화/비활성화
+        /// </summary>
+        /// <param name="enabled">활성화 여부</param>
+        public static void EnableDebugLogging(bool enabled)
+        {
+            try
+            {
+                UnityRecast_EnableDebugLogging(enabled);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"디버그 로깅 설정 실패: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 현재 좌표계 설정 가져오기
+        /// </summary>
+        /// <returns>좌표계 타입</returns>
+        public static CoordinateSystem GetCoordinateSystem()
+        {
+            try
+            {
+                return UnityRecast_GetCoordinateSystem();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"좌표계 설정 가져오기 실패: {e.Message}");
+                return CoordinateSystem.LeftHanded;
+            }
+        }
+
+        /// <summary>
+        /// 현재 Y축 회전 설정 가져오기
+        /// </summary>
+        /// <returns>Y축 회전 타입</returns>
+        public static YAxisRotation GetYAxisRotation()
+        {
+            try
+            {
+                return UnityRecast_GetYAxisRotation();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Y축 회전 설정 가져오기 실패: {e.Message}");
+                return YAxisRotation.None;
+            }
+        }
+
+        #endregion
     }
 
     /// <summary>
@@ -656,6 +862,16 @@ namespace RecastNavigation
         public bool Success;
         public Vector3[] PathPoints;
         public string ErrorMessage;
+    }
+
+    /// <summary>
+    /// NavMesh 디버그 데이터
+    /// </summary>
+    public struct NavMeshDebugData
+    {
+        public Vector3[] Vertices;
+        public int[] Indices;
+        public int TriangleCount;
     }
 
     /// <summary>
