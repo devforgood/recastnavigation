@@ -25,6 +25,8 @@ Assets/Scripts/RecastNavigation/
     ├── RecastNavigationEditor.cs       # 메인 에디터 도구
     ├── RecastNavigationQuickTool.cs    # 빠른 도구
     └── RecastNavigationSetupGuide.cs   # 설정 가이드
+└── Tests/
+    └── RecastNavigationWrapperTests.cs # 유닛 테스트
 ```
 
 ## 설치 방법
@@ -254,6 +256,46 @@ public class AgentMovement : MonoBehaviour
 }
 ```
 
+## 테스트
+
+### Unity 테스트 실행
+
+Unity 프로젝트에서 NUnit 테스트를 실행할 수 있습니다:
+
+1. **Test Runner 열기**: `Window > General > Test Runner`
+2. **EditMode 탭 선택**: 에디터 모드에서 테스트 실행
+3. **테스트 실행**: `RecastNavigationWrapperTests` 클래스의 모든 테스트 실행
+
+### 테스트 커버리지
+
+현재 테스트는 다음 기능들을 커버합니다:
+
+- **초기화 및 정리**: `Initialize()`, `Cleanup()`
+- **NavMesh 빌드**: 다양한 설정으로 NavMesh 빌드
+- **NavMesh 로드**: 유효한/무효한 데이터로 로드 테스트
+- **경로 찾기**: 다양한 시나리오에서 경로 찾기
+- **정보 조회**: 폴리곤 수, 정점 수 조회
+- **성능 테스트**: 빌드 및 경로 찾기 성능
+
+### 테스트 실행 방법
+
+```csharp
+// 개별 테스트 실행
+[Test]
+public void MyTest()
+{
+    // 테스트 코드
+}
+
+// 성능 테스트
+[UnityTest]
+public IEnumerator PerformanceTest()
+{
+    // 성능 테스트 코드
+    yield return null;
+}
+```
+
 ## 성능 최적화
 
 ### 1. NavMesh 빌드 최적화
@@ -307,6 +349,8 @@ void OnDestroy()
 
 - **Console 로그**: Unity 콘솔에서 상세한 에러 메시지 확인
 
+- **테스트 실행**: Test Runner에서 테스트를 실행하여 기능 확인
+
 ## 라이선스
 
 이 프로젝트는 RecastNavigation 라이브러리를 기반으로 하며, 원본 라이브러리의 라이선스를 따릅니다.
@@ -323,6 +367,7 @@ void OnDestroy()
 - **GitHub Issues**: 버그 리포트 및 기능 요청
 - **Documentation**: 이 README 및 코드 주석
 - **Examples**: 제공된 예제 스크립트들
+- **Tests**: 테스트 스크립트로 기능 검증
 
 ## 변경 이력
 
@@ -330,4 +375,5 @@ void OnDestroy()
 - 초기 릴리스
 - 기본 NavMesh 빌드 및 경로 찾기 기능
 - Unity 에디터 도구
-- 설정 가이드 
+- 설정 가이드
+- 유닛 테스트 

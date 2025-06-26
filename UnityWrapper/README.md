@@ -1,117 +1,107 @@
 # Unity RecastNavigation Wrapper
 
-Unity3D에서 RecastNavigation을 사용할 수 있는 C# 래퍼입니다. 이 프로젝트는 RecastNavigation의 C++ 라이브러리를 Unity에서 DLL로 임포트하여 사용할 수 있게 해줍니다.
+RecastNavigation 라이브러리를 Unity3D에서 사용할 수 있도록 래핑한 C++ DLL 프로젝트입니다.
 
-## 기능
+## 개요
 
-- **NavMesh 빌드**: Unity 씬의 Mesh 데이터를 기반으로 NavMesh 생성
+이 프로젝트는 RecastNavigation의 핵심 기능들을 Unity3D에서 사용할 수 있도록 C 스타일 인터페이스로 래핑한 DLL을 제공합니다.
+
+## 주요 기능
+
+- **Mesh에서 NavMesh 생성**: Unity의 Mesh 데이터를 사용하여 RecastNavigation NavMesh 생성
 - **경로 찾기**: A* 알고리즘을 사용한 효율적인 경로 찾기
-- **에디터 도구**: Unity 에디터에서 NavMesh 빌드 및 테스트
-- **런타임 컴포넌트**: 게임 실행 중 NavMesh 사용
-- **시각화**: 경로 및 NavMesh 정보 시각화
-- **설정 옵션**: 다양한 NavMesh 빌드 설정 지원
+- **NavMesh 데이터 관리**: NavMesh 데이터의 저장 및 로드
+- **크로스 플랫폼 지원**: Windows, macOS, Linux 지원
 
 ## 빌드 방법
 
-### Windows
+### Windows (Visual Studio)
 
 ```bash
-# 빌드 디렉토리 생성
 mkdir build
 cd build
-
-# CMake로 프로젝트 생성
 cmake .. -G "Visual Studio 16 2019" -A x64
-
-# 빌드 실행
 cmake --build . --config Release
-
-# DLL 파일은 build/UnityWrapper/Release/ 디렉토리에 생성됩니다
 ```
 
 ### Linux/macOS
 
 ```bash
-# 빌드 디렉토리 생성
 mkdir build
 cd build
-
-# CMake로 프로젝트 생성
 cmake ..
-
-# 빌드 실행
 make -j$(nproc)
-
-# DLL 파일은 build/UnityWrapper/ 디렉토리에 생성됩니다
 ```
 
-## Unity 프로젝트 설정
+## API 인터페이스
 
-1. **DLL 파일 복사**: 빌드된 DLL 파일을 Unity 프로젝트의 `Plugins` 폴더에 복사
-2. **스크립트 복사**: `UnityScripts` 폴더의 모든 C# 스크립트를 Unity 프로젝트에 복사
-3. **플랫폼 설정**: DLL 파일의 플랫폼 설정을 올바르게 구성
+### 헤더 파일
 
-## 사용법
+```cpp
+// UnityNavMeshBuilder.h
+bool InitializeRecastNavigation();
+void CleanupRecastNavigation();
 
-### 1. 에디터 도구 사용
+bool BuildNavMeshFromMesh(
+    const Vector3* vertices, int vertexCount,
+    const int* indices, int indexCount,
+    const NavMeshBuildSettings* settings,
+    unsigned char** navMeshData, int* dataSize,
+    char** errorMessage);
 
-#### 빠른 도구 (Quick Tool)
+bool LoadNavMeshFromData(const unsigned char* data, int dataSize);
+
+bool FindPathBetweenPoints(
+    const Vector3 start, const Vector3 end,
+    Vector3** pathPoints, int* pointCount,
+    char** errorMessage);
+
+int GetNavMeshPolyCount();
+int GetNavMeshVertexCount();
+
+void FreeMemory(void* ptr);
 ```
-Tools > RecastNavigation > 빠른 도구
-```
-- 한 번의 클릭으로 NavMesh 빌드
-- 간단한 경로 찾기 테스트
-- 샘플 씬 생성
 
-#### 상세 에디터 (Detailed Editor)
-```
-Tools > RecastNavigation > Editor
-```
-- 모든 NavMesh 빌드 설정 조정
-- 실시간 경로 찾기 테스트
-- NavMesh 데이터 저장/로드
-- 디버그 정보 표시
+### 데이터 구조
 
-### 2. 런타임 컴포넌트 사용
+```cpp
+struct Vector3
+{
+    float x, y, z;
+};
 
-#### RecastNavigationComponent
+struct NavMeshBuildSettings
+{
+    float cellSize;
+    float cellHeight;
+    float walkableSlopeAngle;
+    float walkableHeight;
+    float walkableRadius;
+    float walkableClimb;
+    float minRegionArea;
+    float mergeRegionArea;
+    int maxVertsPerPoly;
+    float detailSampleDist;
+    float detailSampleMaxError;
+};
+```
+
+## Unity 통합
+
+### Unity 스크립트
+
+Unity에서 사용할 수 있는 C# 스크립트들은 `../UnityRecastNavigation/` 폴더에 있습니다.
+
+### 기본 사용법
+
 ```csharp
-// 컴포넌트 추가
-RecastNavigationComponent navComponent = gameObject.AddComponent<RecastNavigationComponent>();
+using RecastNavigation;
 
-// NavMesh 빌드
-bool success = navComponent.BuildNavMeshFromScene();
-
-// 경로 찾기
-bool pathFound = navComponent.FindPath(startPoint, endPoint);
-Vector3[] path = navComponent.CurrentPath;
-```
-
-#### RecastNavigationSample
-```csharp
-// 샘플 스크립트 사용
-RecastNavigationSample sample = gameObject.AddComponent<RecastNavigationSample>();
-
-// 에이전트와 목표 설정
-sample.SetAgent(agentTransform);
-sample.SetTarget(targetTransform);
-
-// 자동 경로 찾기 및 이동
-sample.autoFindPath = true;
-sample.moveAgent = true;
-```
-
-### 3. 프로그래밍 방식 사용
-
-#### 기본 사용법
-```csharp
 // 초기화
 RecastNavigationWrapper.Initialize();
 
 // NavMesh 빌드 설정
 var buildSettings = NavMeshBuildSettingsExtensions.CreateDefault();
-buildSettings.cellSize = 0.3f;
-buildSettings.cellHeight = 0.2f;
 
 // Mesh에서 NavMesh 빌드
 Mesh mesh = GetComponent<MeshFilter>().sharedMesh;
@@ -135,40 +125,69 @@ if (result.Success)
 RecastNavigationWrapper.Cleanup();
 ```
 
-#### 고급 설정
+### 컴포넌트 사용법
+
 ```csharp
-// 높은 품질 설정
-var highQualitySettings = NavMeshBuildSettingsExtensions.CreateHighQuality();
+// RecastNavigationComponent 추가
+var navComponent = gameObject.AddComponent<RecastNavigationComponent>();
 
-// 낮은 품질 설정 (빠른 빌드)
-var lowQualitySettings = NavMeshBuildSettingsExtensions.CreateLowQuality();
+// 씬에서 NavMesh 빌드
+navComponent.BuildNavMeshFromScene();
 
-// 커스텀 설정
-var customSettings = new NavMeshBuildSettings
-{
-    cellSize = 0.2f,
-    cellHeight = 0.1f,
-    walkableSlopeAngle = 45f,
-    walkableHeight = 2.0f,
-    walkableRadius = 0.6f,
-    walkableClimb = 0.9f,
-    minRegionArea = 8f,
-    mergeRegionArea = 20f,
-    maxVertsPerPoly = 6,
-    detailSampleDist = 6f,
-    detailSampleMaxError = 1f
-};
+// 경로 찾기
+navComponent.FindPath(startPosition, endPosition);
 ```
 
-## 샘플 씬 생성
+### 에디터 도구
 
-에디터 도구에서 "예제 씬 생성" 버튼을 클릭하면 다음과 같은 샘플 씬이 생성됩니다:
+Unity 에디터에서 다음 도구들을 사용할 수 있습니다:
 
-- **Ground**: 기본 바닥 (Plane)
-- **Obstacle_0~4**: 랜덤하게 배치된 장애물들 (Cube)
-- **StartPoint**: 시작점 마커 (Sphere)
-- **EndPoint**: 끝점 마커 (Sphere)
-- **RecastNavigation**: RecastNavigation 컴포넌트가 추가된 오브젝트
+1. **메인 에디터**: `Tools > RecastNavigation > Editor`
+2. **빠른 도구**: `Tools > RecastNavigation > Quick Tool`
+3. **설정 가이드**: `Tools > RecastNavigation > Setup Guide`
+
+## 파일 구조
+
+```
+UnityWrapper/
+├── Include/
+│   ├── UnityNavMeshBuilder.h
+│   ├── UnityPathfinding.h
+│   └── UnityRecastWrapper.h
+├── Source/
+│   ├── UnityNavMeshBuilder.cpp
+│   ├── UnityPathfinding.cpp
+│   └── UnityRecastWrapper.cpp
+├── Tests/
+│   ├── CMakeLists.txt
+│   ├── TestUnityNavMeshBuilder.cpp
+│   ├── TestUnityPathfinding.cpp
+│   └── TestUnityRecastWrapper.cpp
+├── CMakeLists.txt
+├── README.md
+├── run_tests.bat
+└── run_tests.sh
+```
+
+## 테스트
+
+### C++ 테스트 실행
+
+#### Windows
+```bash
+cd UnityWrapper
+run_tests.bat
+```
+
+#### Linux/macOS
+```bash
+cd UnityWrapper
+./run_tests.sh
+```
+
+### Unity C# 테스트
+
+Unity 프로젝트에서 `../UnityRecastNavigation/Assets/Scripts/RecastNavigation/Tests/` 폴더의 테스트 스크립트를 실행하세요.
 
 ## 설정 옵션
 
@@ -194,26 +213,6 @@ var customSettings = new NavMeshBuildSettings
 - **높은 품질**: 더 정확한 NavMesh, 느린 빌드
 - **낮은 품질**: 빠른 빌드, 간단한 NavMesh
 
-## 테스트
-
-### C++ 테스트 실행
-
-#### Windows
-```bash
-cd UnityWrapper
-run_tests.bat
-```
-
-#### Linux/macOS
-```bash
-cd UnityWrapper
-./run_tests.sh
-```
-
-### Unity C# 테스트
-
-Unity 프로젝트에서 `UnityScripts/Tests/` 폴더의 테스트 스크립트를 실행하세요.
-
 ## 문제 해결
 
 ### 일반적인 문제
@@ -235,7 +234,7 @@ Unity 프로젝트에서 `UnityScripts/Tests/` 폴더의 테스트 스크립트�
 
 ### 디버그 정보
 
-에디터 도구의 디버그 섹션에서 다음 정보를 확인할 수 있습니다:
+Unity 에디터 도구의 디버그 섹션에서 다음 정보를 확인할 수 있습니다:
 - NavMesh 폴리곤 수
 - NavMesh 정점 수
 - 경로 길이
@@ -248,6 +247,20 @@ Unity 프로젝트에서 `UnityScripts/Tests/` 폴더의 테스트 스크립트�
 2. **Mesh 최적화**: 불필요한 정점 제거
 3. **영역 크기 조정**: minRegionArea와 mergeRegionArea 조정
 4. **폴리곤 복잡도 제한**: maxVertsPerPoly 값 조정
+
+## Unity 스크립트 사용
+
+Unity에서 사용할 수 있는 완전한 스크립트 패키지는 `../UnityRecastNavigation/` 폴더에 있습니다. 이 폴더에는 다음이 포함됩니다:
+
+- **RecastNavigationWrapper.cs**: DLL 래퍼 클래스
+- **RecastNavigationComponent.cs**: 런타임 컴포넌트
+- **RecastNavigationSample.cs**: 사용 예제
+- **Editor/**: Unity 에디터 도구들
+  - RecastNavigationEditor.cs
+  - RecastNavigationQuickTool.cs
+  - RecastNavigationSetupGuide.cs
+
+자세한 사용법은 `../UnityRecastNavigation/README.md`를 참조하세요.
 
 ## 라이선스
 
@@ -270,7 +283,6 @@ Unity 프로젝트에서 `UnityScripts/Tests/` 폴더의 테스트 스크립트�
 ### v1.0.0
 - 초기 릴리스
 - 기본 NavMesh 빌드 및 경로 찾기 기능
-- Unity 에디터 도구
-- 런타임 컴포넌트
-- 샘플 스크립트
+- C++ DLL 래퍼
+- Unity C# 인터페이스
 - 테스트 스위트 

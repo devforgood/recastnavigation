@@ -25,6 +25,39 @@ Recast Navigation is divided into multiple modules, each contained in its own fo
 - `DebugUtils/` - API for drawing debug visualizations of navigation data and behavior
 - `Tests/` - Unit tests
 - `RecastDemo/` - Standalone, comprehensive demo app showcasing all aspects of Recast & Detour's functionality
+- `UnityWrapper/` - C++ DLL wrapper for Unity integration
+- `UnityRecastNavigation/` - Complete Unity C# scripts and editor tools
+
+## 🎮 Unity Integration
+
+This project includes a complete Unity integration solution:
+
+### UnityWrapper
+C++ DLL wrapper that provides a C-style interface for Unity:
+- NavMesh generation from Unity meshes
+- Pathfinding with A* algorithm
+- Cross-platform support (Windows, macOS, Linux)
+
+### UnityRecastNavigation
+Complete Unity C# package with:
+- **RecastNavigationWrapper.cs** - DLL wrapper class
+- **RecastNavigationComponent.cs** - Runtime component for NavMesh operations
+- **RecastNavigationSample.cs** - Usage examples and agent movement
+- **Editor Tools**:
+  - RecastNavigationEditor.cs - Main editor tool
+  - RecastNavigationQuickTool.cs - Quick utilities
+  - RecastNavigationSetupGuide.cs - Setup wizard
+- **Tests** - NUnit test suite
+
+### Quick Start for Unity
+1. Build the UnityWrapper DLL
+2. Copy the DLL to your Unity project's `Assets/Plugins/` folder
+3. Import the UnityRecastNavigation scripts
+4. Use the Setup Guide: `Tools > RecastNavigation > Setup Guide`
+
+For detailed Unity integration instructions, see:
+- [UnityWrapper README](UnityWrapper/README.md)
+- [UnityRecastNavigation README](UnityRecastNavigation/README.md)
 
 ## ⚡ Getting Started
 
