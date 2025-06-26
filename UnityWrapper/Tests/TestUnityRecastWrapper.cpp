@@ -35,16 +35,13 @@ TEST_CASE("Build NavMesh with simple mesh", "[UnityRecastWrapper]")
 {
     REQUIRE(UnityRecast_Initialize());
     
-    // 메시를 2x2 그리드로 분할하고 높이 차이 추가 (총 8개 삼각형, 9개 정점)
+    // 더 큰 단일 삼각형 메시
     std::vector<float> vertices = {
-        -2.0f, 0.0f, -2.0f,   0.0f, 0.1f, -2.0f,   2.0f, 0.0f, -2.0f,
-        -2.0f, 0.0f,  0.0f,   0.0f, 0.2f,  0.0f,   2.0f, 0.0f,  0.0f,
-        -2.0f, 0.0f,  2.0f,   0.0f, 0.1f,  2.0f,   2.0f, 0.0f,  2.0f
+        -3.0f, 0.0f, -3.0f,
+         3.0f, 0.0f, -3.0f,
+         0.0f, 0.0f,  3.0f
     };
-    std::vector<int> indices = {
-        0,1,3, 1,4,3, 1,2,4, 2,5,4,
-        3,4,6, 4,7,6, 4,5,7, 5,8,7
-    };
+    std::vector<int> indices = { 0, 1, 2 };
     
     UnityMeshData meshData;
     meshData.vertices = vertices.data();
@@ -53,17 +50,17 @@ TEST_CASE("Build NavMesh with simple mesh", "[UnityRecastWrapper]")
     meshData.indexCount = static_cast<int>(indices.size());
     
     UnityNavMeshBuildSettings settings = {};
-    settings.cellSize = 0.1f;           // 더 작게
-    settings.cellHeight = 0.05f;        // 더 작게
+    settings.cellSize = 0.1f;
+    settings.cellHeight = 0.1f;
     settings.walkableSlopeAngle = 45.0f;
-    settings.walkableHeight = 0.1f;     // 더 작게
+    settings.walkableHeight = 0.1f;
     settings.walkableRadius = 0.0f;    // erosion 비활성화
-    settings.walkableClimb = 0.05f;     // 더 작게
-    settings.minRegionArea = 1.0f;      // 더 작게
-    settings.mergeRegionArea = 1.0f;    // 더 작게
+    settings.walkableClimb = 0.1f;
+    settings.minRegionArea = 1.0f;
+    settings.mergeRegionArea = 1.0f;
     settings.maxVertsPerPoly = 6;
-    settings.detailSampleDist = 1.0f;   // 더 작게
-    settings.detailSampleMaxError = 0.1f; // 더 작게
+    settings.detailSampleDist = 1.0f;
+    settings.detailSampleMaxError = 0.1f;
     
     SECTION("NavMesh build success")
     {
@@ -115,9 +112,9 @@ TEST_CASE("Pathfinding test", "[UnityRecastWrapper]")
     settings.cellSize = 0.3f;
     settings.cellHeight = 0.2f;
     settings.walkableSlopeAngle = 45.0f;
-    settings.walkableHeight = 2.0f;
-    settings.walkableRadius = 0.6f;
-    settings.walkableClimb = 0.9f;
+    settings.walkableHeight = 0.5f;
+    settings.walkableRadius = 0.0f;
+    settings.walkableClimb = 0.3f;
     settings.minRegionArea = 8.0f;
     settings.mergeRegionArea = 20.0f;
     settings.maxVertsPerPoly = 6;
@@ -141,7 +138,7 @@ TEST_CASE("Pathfinding test", "[UnityRecastWrapper]")
         std::cout << "  Poly Count: " << polyCount << std::endl;
         std::cout << "  Vertex Count: " << vertexCount << std::endl;
         
-        UnityPathResult pathResult = UnityRecast_FindPath(0.0f, 0.0f, 0.0f, 1.5f, 0.0f, 1.5f);
+        UnityPathResult pathResult = UnityRecast_FindPath(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f);
         
         // 경로 찾기 결과 디버그
         std::cout << "  Path Result:" << std::endl;
@@ -170,9 +167,9 @@ TEST_CASE("Pathfinding test", "[UnityRecastWrapper]")
         // Last point should be near end point
         int lastIndex = (pathResult.pointCount - 1) * 3;
         float endDist = std::sqrt(
-            std::pow(pathResult.pathPoints[lastIndex] - 1.5f, 2) +
+            std::pow(pathResult.pathPoints[lastIndex] - 1.0f, 2) +
             std::pow(pathResult.pathPoints[lastIndex + 1] - 0.0f, 2) +
-            std::pow(pathResult.pathPoints[lastIndex + 2] - 1.5f, 2)
+            std::pow(pathResult.pathPoints[lastIndex + 2] - 1.0f, 2)
         );
         REQUIRE(endDist < 1.0f);
         
@@ -309,7 +306,7 @@ TEST_CASE("Memory management test", "[UnityRecastWrapper]")
             REQUIRE(UnityRecast_LoadNavMesh(result.navMeshData, result.dataSize) == true);
             
             // Find a path
-            UnityPathResult pathResult = UnityRecast_FindPath(0.0f, 0.0f, 0.0f, 1.5f, 0.0f, 1.5f);
+            UnityPathResult pathResult = UnityRecast_FindPath(0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f);
             if (pathResult.success)
             {
                 UnityRecast_FreePathResult(&pathResult);

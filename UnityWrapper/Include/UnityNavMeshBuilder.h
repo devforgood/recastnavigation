@@ -52,6 +52,7 @@ private:
     bool BuildPolyMesh(const UnityNavMeshBuildSettings* settings);
     bool BuildDetailMesh(const UnityNavMeshBuildSettings* settings);
     bool BuildDetourNavMesh(const UnityNavMeshBuildSettings* settings);
+    bool CreateSimplePolyMesh(const UnityNavMeshBuildSettings* settings);
     
     // 유틸리티 함수
     void Cleanup();
