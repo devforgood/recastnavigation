@@ -13,6 +13,9 @@ namespace RecastNavigation
         private bool showSettings = true;
         private bool showColors = true;
         private bool showInfo = true;
+        private bool showPathSettings = true;
+        private bool showPerformanceSettings = true;
+        private bool showInteractionSettings = true;
         
         private void OnEnable()
         {
@@ -98,6 +101,105 @@ namespace RecastNavigation
                 
                 EditorGUILayout.LabelField("정점 수", RecastNavigationWrapper.GetVertexCount().ToString());
                 EditorGUILayout.LabelField("폴리곤 수", RecastNavigationWrapper.GetPolyCount().ToString());
+                
+                EditorGUI.indentLevel--;
+            }
+            
+            EditorGUILayout.Space();
+            
+            // 경로 시각화 설정
+            showPathSettings = EditorGUILayout.Foldout(showPathSettings, "경로 시각화 설정");
+            if (showPathSettings)
+            {
+                EditorGUI.indentLevel++;
+                
+                SerializedProperty showPath = serializedObject.FindProperty("showPath");
+                SerializedProperty animatePath = serializedObject.FindProperty("animatePath");
+                SerializedProperty pathAnimationSpeed = serializedObject.FindProperty("pathAnimationSpeed");
+                SerializedProperty pathStartColor = serializedObject.FindProperty("pathStartColor");
+                SerializedProperty pathEndColor = serializedObject.FindProperty("pathEndColor");
+                SerializedProperty showPathArrows = serializedObject.FindProperty("showPathArrows");
+                SerializedProperty arrowSize = serializedObject.FindProperty("arrowSize");
+                
+                EditorGUILayout.PropertyField(showPath, new GUIContent("경로 표시"));
+                EditorGUILayout.PropertyField(animatePath, new GUIContent("경로 애니메이션"));
+                
+                if (animatePath.boolValue)
+                {
+                    EditorGUILayout.PropertyField(pathAnimationSpeed, new GUIContent("애니메이션 속도"));
+                }
+                
+                EditorGUILayout.PropertyField(pathStartColor, new GUIContent("시작 색상"));
+                EditorGUILayout.PropertyField(pathEndColor, new GUIContent("끝 색상"));
+                EditorGUILayout.PropertyField(showPathArrows, new GUIContent("화살표 표시"));
+                
+                if (showPathArrows.boolValue)
+                {
+                    EditorGUILayout.PropertyField(arrowSize, new GUIContent("화살표 크기"));
+                }
+                
+                EditorGUI.indentLevel--;
+            }
+            
+            EditorGUILayout.Space();
+            
+            // 성능 최적화 설정
+            showPerformanceSettings = EditorGUILayout.Foldout(showPerformanceSettings, "성능 최적화 설정");
+            if (showPerformanceSettings)
+            {
+                EditorGUI.indentLevel++;
+                
+                SerializedProperty useMeshCaching = serializedObject.FindProperty("useMeshCaching");
+                SerializedProperty useLOD = serializedObject.FindProperty("useLOD");
+                SerializedProperty lodDistance = serializedObject.FindProperty("lodDistance");
+                SerializedProperty maxVisibleTriangles = serializedObject.FindProperty("maxVisibleTriangles");
+                
+                EditorGUILayout.PropertyField(useMeshCaching, new GUIContent("메시 캐싱"));
+                EditorGUILayout.PropertyField(useLOD, new GUIContent("LOD 사용"));
+                
+                if (useLOD.boolValue)
+                {
+                    EditorGUILayout.PropertyField(lodDistance, new GUIContent("LOD 거리"));
+                    EditorGUILayout.PropertyField(maxVisibleTriangles, new GUIContent("최대 삼각형 수"));
+                }
+                
+                if (GUILayout.Button("캐시 정리"))
+                {
+                    gizmo.ClearCache();
+                }
+                
+                EditorGUI.indentLevel--;
+            }
+            
+            EditorGUILayout.Space();
+            
+            // 인터랙션 설정
+            showInteractionSettings = EditorGUILayout.Foldout(showInteractionSettings, "인터랙션 설정");
+            if (showInteractionSettings)
+            {
+                EditorGUI.indentLevel++;
+                
+                SerializedProperty enableInteraction = serializedObject.FindProperty("enableInteraction");
+                SerializedProperty showInfoOnHover = serializedObject.FindProperty("showInfoOnHover");
+                SerializedProperty enableClickToEdit = serializedObject.FindProperty("enableClickToEdit");
+                
+                EditorGUILayout.PropertyField(enableInteraction, new GUIContent("인터랙션 활성화"));
+                EditorGUILayout.PropertyField(showInfoOnHover, new GUIContent("호버 정보 표시"));
+                EditorGUILayout.PropertyField(enableClickToEdit, new GUIContent("클릭 편집"));
+                
+                if (enableInteraction.boolValue)
+                {
+                    EditorGUILayout.HelpBox(
+                        "키보드 단축키:\n" +
+                        "T - 시각화 토글\n" +
+                        "R - 새로고침\n" +
+                        "W - 와이어프레임 토글\n" +
+                        "F - 면 토글\n" +
+                        "V - 정점 토글\n" +
+                        "A - 경로 애니메이션 토글",
+                        MessageType.Info
+                    );
+                }
                 
                 EditorGUI.indentLevel--;
             }

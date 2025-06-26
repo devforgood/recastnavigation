@@ -610,6 +610,79 @@ gizmo.SetWireframeColor(new Color(0.1f, 0.1f, 0.1f, 1.0f));
 - **실시간 업데이트**: 필요하지 않은 경우 자동 업데이트를 비활성화
 - **선택적 표시**: 필요한 요소만 표시하여 렌더링 성능 향상
 
+### 고급 기능
+
+#### 1. 성능 최적화
+- **메시 캐싱**: 동일한 삼각형 메시를 재사용하여 메모리 효율성 향상
+- **LOD (Level of Detail)**: 거리에 따른 세부 수준 조절
+- **최대 표시 삼각형 수 제한**: 성능에 맞춰 표시할 삼각형 수 제한
+
+#### 2. 경로 시각화
+- **애니메이션 경로**: 경로를 순차적으로 애니메이션으로 표시
+- **그라데이션 색상**: 시작점에서 끝점까지 색상 변화
+- **경로 화살표**: 이동 방향을 나타내는 화살표 표시
+- **시작/끝점 강조**: 경로의 시작점과 끝점을 특별히 표시
+
+#### 3. 인터랙션 기능
+- **키보드 단축키**: 
+  - `T`: 시각화 토글
+  - `R`: 새로고침
+  - `W`: 와이어프레임 토글
+  - `F`: 면 토글
+  - `V`: 정점 토글
+  - `A`: 경로 애니메이션 토글
+- **호버 정보**: 마우스 호버 시 위치 정보 표시
+- **실시간 설정 변경**: 런타임 중에도 설정 변경 가능
+
+#### 4. 고급 설정 예제
+
+```csharp
+// 성능 최적화 설정
+gizmo.SetPerformanceSettings(
+    useCaching: true,      // 메시 캐싱 사용
+    useLOD: true,          // LOD 사용
+    maxTriangles: 1000     // 최대 1000개 삼각형 표시
+);
+
+// 경로 시각화 설정
+gizmo.SetPathAnimation(true, 2f);  // 애니메이션 활성화, 속도 2배
+gizmo.SetPathColors(Color.green, Color.red);  // 녹색에서 빨간색으로
+gizmo.SetPathArrows(true, 0.8f);  // 화살표 표시, 크기 0.8
+
+// 인터랙션 설정
+gizmo.SetInteraction(true);  // 인터랙션 활성화
+gizmo.SetHoverInfo(true);    // 호버 정보 표시
+```
+
+#### 5. 성능 모니터링
+
+```csharp
+public class NavMeshPerformanceMonitor : MonoBehaviour
+{
+    private NavMeshGizmo gizmo;
+    private float lastFrameTime;
+    private int frameCount;
+    
+    void Start()
+    {
+        gizmo = GetComponent<NavMeshGizmo>();
+    }
+    
+    void Update()
+    {
+        frameCount++;
+        if (Time.time - lastFrameTime >= 1f)
+        {
+            float fps = frameCount / (Time.time - lastFrameTime);
+            Debug.Log($"NavMesh Gizmo FPS: {fps:F1}");
+            
+            frameCount = 0;
+            lastFrameTime = Time.time;
+        }
+    }
+}
+```
+
 ## 테스트
 
 ### Unity 테스트 실행

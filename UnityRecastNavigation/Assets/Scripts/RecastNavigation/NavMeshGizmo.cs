@@ -27,11 +27,46 @@ namespace RecastNavigation
         [SerializeField] private bool autoUpdate = true;
         [SerializeField] private float updateInterval = 1.0f;
         
+        [Header("성능 최적화")]
+        [SerializeField] private bool useMeshCaching = true;
+        [SerializeField] private bool useLOD = true;
+        [SerializeField] private float lodDistance = 50f;
+        [SerializeField] private int maxVisibleTriangles = 1000;
+        
+        [Header("경로 시각화")]
+        [SerializeField] private bool showPath = true;
+        [SerializeField] private bool animatePath = false;
+        [SerializeField] private float pathAnimationSpeed = 1f;
+        [SerializeField] private Color pathStartColor = Color.green;
+        [SerializeField] private Color pathEndColor = Color.red;
+        [SerializeField] private bool showPathArrows = true;
+        [SerializeField] private float arrowSize = 0.5f;
+        
+        [Header("인터랙션")]
+        [SerializeField] private bool enableInteraction = true;
+        [SerializeField] private bool showInfoOnHover = true;
+        [SerializeField] private bool enableClickToEdit = false;
+        
         private NavMeshDebugData debugData;
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> indices = new List<int>();
         private List<Vector3> triangleCenters = new List<Vector3>();
         private List<Vector3> triangleNormals = new List<Vector3>();
+        
+        // 성능 최적화를 위한 캐싱
+        private Dictionary<int, Mesh> triangleMeshCache = new Dictionary<int, Mesh>();
+        private Queue<Mesh> meshPool = new Queue<Mesh>();
+        private const int MAX_POOL_SIZE = 100;
+        
+        // 경로 시각화
+        private List<Vector3> currentPath = new List<Vector3>();
+        private float pathAnimationTime = 0f;
+        private int animatedPathIndex = 0;
+        
+        // 인터랙션
+        private Vector3 hoveredPoint;
+        private bool isHovering = false;
+        private Camera sceneCamera;
         
         private float lastUpdateTime;
         private bool hasValidData = false;
@@ -40,6 +75,11 @@ namespace RecastNavigation
         {
             // 초기화
             InitializeGizmo();
+            
+            // 카메라 참조 가져오기
+            sceneCamera = Camera.main;
+            if (sceneCamera == null)
+                sceneCamera = FindObjectOfType<Camera>();
         }
         
         private void Update()
@@ -49,6 +89,15 @@ namespace RecastNavigation
                 UpdateNavMeshData();
                 lastUpdateTime = Time.time;
             }
+            
+            // 경로 애니메이션 업데이트
+            if (animatePath && currentPath.Count > 0)
+            {
+                UpdatePathAnimation();
+            }
+            
+            // 키보드 단축키 처리
+            HandleKeyboardShortcuts();
         }
         
         /// <summary>
@@ -159,6 +208,18 @@ namespace RecastNavigation
             {
                 DrawVertices();
             }
+            
+            // 경로 그리기
+            if (showPath && currentPath.Count > 0)
+            {
+                DrawPath();
+            }
+            
+            // 호버 정보 그리기
+            if (showInfoOnHover && isHovering)
+            {
+                DrawHoverInfo();
+            }
         }
         
         /// <summary>
@@ -183,7 +244,7 @@ namespace RecastNavigation
                         Vector3 v3 = vertices[idx3];
                         
                         // 삼각형 그리기
-                        Gizmos.DrawMesh(CreateTriangleMesh(v1, v2, v3));
+                        Gizmos.DrawMesh(GetCachedTriangleMesh(v1, v2, v3));
                     }
                 }
             }
@@ -230,6 +291,83 @@ namespace RecastNavigation
             {
                 Gizmos.DrawSphere(vertex, vertexSize);
             }
+        }
+        
+        /// <summary>
+        /// 경로 그리기
+        /// </summary>
+        private void DrawPath()
+        {
+            if (currentPath.Count < 2) return;
+            
+            // 경로 선 그리기
+            for (int i = 1; i < currentPath.Count; i++)
+            {
+                Vector3 start = currentPath[i - 1];
+                Vector3 end = currentPath[i];
+                
+                // 애니메이션된 경로
+                if (animatePath && i <= animatedPathIndex)
+                {
+                    float t = (i == animatedPathIndex) ? pathAnimationTime : 1f;
+                    Color pathColor = Color.Lerp(pathStartColor, pathEndColor, (float)i / currentPath.Count);
+                    pathColor.a = t;
+                    Gizmos.color = pathColor;
+                }
+                else
+                {
+                    Gizmos.color = Color.Lerp(pathStartColor, pathEndColor, (float)i / currentPath.Count);
+                }
+                
+                Gizmos.DrawLine(start, end);
+                
+                // 경로 화살표 그리기
+                if (showPathArrows && i < currentPath.Count - 1)
+                {
+                    DrawPathArrow(start, end);
+                }
+            }
+            
+            // 시작점과 끝점 표시
+            Gizmos.color = pathStartColor;
+            Gizmos.DrawWireSphere(currentPath[0], arrowSize);
+            
+            Gizmos.color = pathEndColor;
+            Gizmos.DrawWireSphere(currentPath[currentPath.Count - 1], arrowSize);
+        }
+        
+        /// <summary>
+        /// 경로 화살표 그리기
+        /// </summary>
+        private void DrawPathArrow(Vector3 start, Vector3 end)
+        {
+            Vector3 direction = (end - start).normalized;
+            Vector3 center = (start + end) * 0.5f;
+            
+            // 화살표 머리 그리기
+            Vector3 right = Vector3.Cross(direction, Vector3.up).normalized;
+            Vector3 arrowTip = center + direction * arrowSize * 0.5f;
+            Vector3 arrowLeft = arrowTip - direction * arrowSize + right * arrowSize * 0.3f;
+            Vector3 arrowRight = arrowTip - direction * arrowSize - right * arrowSize * 0.3f;
+            
+            Gizmos.DrawLine(arrowTip, arrowLeft);
+            Gizmos.DrawLine(arrowTip, arrowRight);
+        }
+        
+        /// <summary>
+        /// 호버 정보 그리기
+        /// </summary>
+        private void DrawHoverInfo()
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(hoveredPoint, 0.2f);
+            
+            // 호버된 지점의 정보 표시
+            #if UNITY_EDITOR
+            UnityEditor.Handles.Label(hoveredPoint + Vector3.up * 0.3f, 
+                $"Position: {hoveredPoint}\n" +
+                $"Distance: {Vector3.Distance(sceneCamera.transform.position, hoveredPoint):F2}");
+            #endif
         }
         
         /// <summary>
@@ -314,6 +452,9 @@ namespace RecastNavigation
         {
             // NavMesh 디버그 드로잉 비활성화
             RecastNavigationWrapper.SetDebugDraw(false);
+            
+            // 메시 캐시 정리
+            ClearMeshCache();
         }
         
         #region Public API
@@ -397,6 +538,218 @@ namespace RecastNavigation
         public void SetUpdateInterval(float interval)
         {
             updateInterval = Mathf.Max(0.1f, interval);
+        }
+        
+        /// <summary>
+        /// 경로 설정
+        /// </summary>
+        /// <param name="path">경로 포인트 배열</param>
+        public void SetPath(Vector3[] path)
+        {
+            currentPath.Clear();
+            if (path != null)
+            {
+                currentPath.AddRange(path);
+            }
+            pathAnimationTime = 0f;
+            animatedPathIndex = 0;
+        }
+        
+        /// <summary>
+        /// 경로 지우기
+        /// </summary>
+        public void ClearPath()
+        {
+            currentPath.Clear();
+            pathAnimationTime = 0f;
+            animatedPathIndex = 0;
+        }
+        
+        /// <summary>
+        /// 경로 애니메이션 설정
+        /// </summary>
+        /// <param name="enabled">활성화 여부</param>
+        /// <param name="speed">애니메이션 속도</param>
+        public void SetPathAnimation(bool enabled, float speed = 1f)
+        {
+            animatePath = enabled;
+            pathAnimationSpeed = speed;
+        }
+        
+        /// <summary>
+        /// 경로 색상 설정
+        /// </summary>
+        /// <param name="startColor">시작 색상</param>
+        /// <param name="endColor">끝 색상</param>
+        public void SetPathColors(Color startColor, Color endColor)
+        {
+            pathStartColor = startColor;
+            pathEndColor = endColor;
+        }
+        
+        /// <summary>
+        /// 경로 화살표 설정
+        /// </summary>
+        /// <param name="show">표시 여부</param>
+        /// <param name="size">화살표 크기</param>
+        public void SetPathArrows(bool show, float size = 0.5f)
+        {
+            showPathArrows = show;
+            arrowSize = size;
+        }
+        
+        /// <summary>
+        /// 인터랙션 설정
+        /// </summary>
+        /// <param name="enabled">활성화 여부</param>
+        public void SetInteraction(bool enabled)
+        {
+            enableInteraction = enabled;
+        }
+        
+        /// <summary>
+        /// 호버 정보 표시 설정
+        /// </summary>
+        /// <param name="show">표시 여부</param>
+        public void SetHoverInfo(bool show)
+        {
+            showInfoOnHover = show;
+        }
+        
+        /// <summary>
+        /// 성능 최적화 설정
+        /// </summary>
+        /// <param name="useCaching">메시 캐싱 사용 여부</param>
+        /// <param name="useLOD">LOD 사용 여부</param>
+        /// <param name="maxTriangles">최대 표시 삼각형 수</param>
+        public void SetPerformanceSettings(bool useCaching, bool useLOD, int maxTriangles)
+        {
+            useMeshCaching = useCaching;
+            this.useLOD = useLOD;
+            maxVisibleTriangles = maxTriangles;
+        }
+        
+        /// <summary>
+        /// 메시 캐시 정리
+        /// </summary>
+        public void ClearCache()
+        {
+            ClearMeshCache();
+        }
+        
+        #endregion
+        
+        #region 성능 최적화
+        
+        /// <summary>
+        /// 키보드 단축키 처리
+        /// </summary>
+        private void HandleKeyboardShortcuts()
+        {
+            if (!enableInteraction) return;
+            
+            // T: 토글 시각화
+            if (Input.GetKeyDown(KeyCode.T))
+            {
+                showNavMesh = !showNavMesh;
+                Debug.Log($"NavMesh 시각화: {(showNavMesh ? "활성화" : "비활성화")}");
+            }
+            
+            // R: 새로고침
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                UpdateNavMeshData();
+                Debug.Log("NavMesh 데이터 새로고침");
+            }
+            
+            // W: 와이어프레임 토글
+            if (Input.GetKeyDown(KeyCode.W))
+            {
+                showWireframe = !showWireframe;
+                Debug.Log($"와이어프레임: {(showWireframe ? "활성화" : "비활성화")}");
+            }
+            
+            // F: 면 토글
+            if (Input.GetKeyDown(KeyCode.F))
+            {
+                showFaces = !showFaces;
+                Debug.Log($"면 표시: {(showFaces ? "활성화" : "비활성화")}");
+            }
+            
+            // V: 정점 토글
+            if (Input.GetKeyDown(KeyCode.V))
+            {
+                showVertices = !showVertices;
+                Debug.Log($"정점 표시: {(showVertices ? "활성화" : "비활성화")}");
+            }
+            
+            // A: 경로 애니메이션 토글
+            if (Input.GetKeyDown(KeyCode.A))
+            {
+                animatePath = !animatePath;
+                Debug.Log($"경로 애니메이션: {(animatePath ? "활성화" : "비활성화")}");
+            }
+        }
+        
+        /// <summary>
+        /// 경로 애니메이션 업데이트
+        /// </summary>
+        private void UpdatePathAnimation()
+        {
+            pathAnimationTime += Time.deltaTime * pathAnimationSpeed;
+            
+            if (pathAnimationTime >= 1f)
+            {
+                pathAnimationTime = 0f;
+                animatedPathIndex = (animatedPathIndex + 1) % currentPath.Count;
+            }
+        }
+        
+        /// <summary>
+        /// 메시 캐시에서 메시 가져오기
+        /// </summary>
+        private Mesh GetCachedTriangleMesh(Vector3 v1, Vector3 v2, Vector3 v3)
+        {
+            if (!useMeshCaching)
+                return CreateTriangleMesh(v1, v2, v3);
+            
+            int hash = GetTriangleHash(v1, v2, v3);
+            
+            if (triangleMeshCache.TryGetValue(hash, out Mesh cachedMesh))
+                return cachedMesh;
+            
+            Mesh newMesh = CreateTriangleMesh(v1, v2, v3);
+            triangleMeshCache[hash] = newMesh;
+            
+            return newMesh;
+        }
+        
+        /// <summary>
+        /// 삼각형 해시 생성
+        /// </summary>
+        private int GetTriangleHash(Vector3 v1, Vector3 v2, Vector3 v3)
+        {
+            return v1.GetHashCode() ^ v2.GetHashCode() ^ v3.GetHashCode();
+        }
+        
+        /// <summary>
+        /// 메시 캐시 정리
+        /// </summary>
+        private void ClearMeshCache()
+        {
+            foreach (var mesh in triangleMeshCache.Values)
+            {
+                if (mesh != null)
+                    DestroyImmediate(mesh);
+            }
+            triangleMeshCache.Clear();
+            
+            while (meshPool.Count > 0)
+            {
+                var mesh = meshPool.Dequeue();
+                if (mesh != null)
+                    DestroyImmediate(mesh);
+            }
         }
         
         #endregion

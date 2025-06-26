@@ -542,6 +542,12 @@ namespace RecastNavigation
                     currentPath.AddRange(pathPoints);
 
                     OnPathFound?.Invoke(pathPoints);
+                    
+                    // NavMeshGizmo에 경로 전달
+                    if (navMeshGizmo != null)
+                    {
+                        navMeshGizmo.SetPath(pathPoints);
+                    }
 
                     return new PathfindingResult
                     {
@@ -571,11 +577,17 @@ namespace RecastNavigation
         }
 
         /// <summary>
-        /// 경로 지우기
+        /// 현재 경로 지우기
         /// </summary>
         public void ClearPath()
         {
             currentPath.Clear();
+            
+            // NavMeshGizmo에서도 경로 지우기
+            if (navMeshGizmo != null)
+            {
+                navMeshGizmo.ClearPath();
+            }
         }
 
         #endregion
