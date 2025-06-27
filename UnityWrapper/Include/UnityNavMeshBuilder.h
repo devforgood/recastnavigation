@@ -26,20 +26,10 @@ public:
     
     // NavMesh 인스턴스 가져오기
     dtNavMesh* GetNavMesh() const { 
-        if (m_navMesh) {
-            return m_navMesh.get(); 
-        }
-        // 테스트 모드에서는 더미 포인터 반환 (실제로는 사용되지 않음)
-        UNITY_LOG_INFO("TEST MODE: GetNavMesh returning dummy pointer");
-        return reinterpret_cast<dtNavMesh*>(static_cast<uintptr_t>(0x12345678)); // 더미 포인터
+        return m_navMesh.get(); 
     }
     dtNavMeshQuery* GetNavMeshQuery() const { 
-        if (m_navMeshQuery) {
-            return m_navMeshQuery.get(); 
-        }
-        // 테스트 모드에서는 더미 포인터 반환 (실제로는 사용되지 않음)
-        UNITY_LOG_INFO("TEST MODE: GetNavMeshQuery returning dummy pointer");
-        return reinterpret_cast<dtNavMeshQuery*>(static_cast<uintptr_t>(0x87654321)); // 더미 포인터
+        return m_navMeshQuery.get(); 
     }
     
     int GetPolyCount() const;

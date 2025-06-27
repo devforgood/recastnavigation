@@ -129,21 +129,31 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
         unsigned char* navData = nullptr;
         int navDataSize = 0;
         
-        // 테스트 목적으로 더미 NavMesh 데이터 생성
-        const int dummyDataSize = 1024;
-        navData = new unsigned char[dummyDataSize];
-        memset(navData, 0, dummyDataSize);
+        if (m_navMesh) {
+            // 실제 NavMesh에서 데이터 추출
+            const dtNavMesh* navMesh = m_navMesh.get();
+            
+            // 첫 번째 타일의 데이터 추출 (단일 타일 NavMesh 가정)
+            for (int i = 0; i < navMesh->getMaxTiles(); ++i) {
+                const dtMeshTile* tile = navMesh->getTile(i);
+                if (tile && tile->header && tile->dataSize > 0) {
+                    navDataSize = tile->dataSize;
+                    navData = new unsigned char[navDataSize];
+                    memcpy(navData, tile->data, navDataSize);
+                    UNITY_LOG_INFO("NavMesh data extracted from tile %d, size=%d", i, navDataSize);
+                    break;
+                }
+            }
+        }
         
-        // 간단한 더미 헤더 설정
-        unsigned int* header = reinterpret_cast<unsigned int*>(navData);
-        header[0] = 'M' | ('N' << 8) | ('A' << 16) | ('V' << 24); // 'NAVM' 매직 넘버
-        header[1] = 1; // 버전
-        header[2] = 0; // x
-        header[3] = 0; // y
-        header[4] = 1; // layer
+        if (!navData || navDataSize == 0) {
+            UNITY_LOG_ERROR("Failed to serialize NavMesh data");
+            result.success = false;
+            result.errorMessage = const_cast<char*>("Failed to serialize NavMesh data");
+            return result;
+        }
         
-        navDataSize = dummyDataSize;
-        UNITY_LOG_INFO("TEST MODE: Created dummy NavMesh data, size=%d", navDataSize);
+        UNITY_LOG_INFO("NavMesh data serialization completed, size=%d", navDataSize);
         
         result.navMeshData = navData;
         result.dataSize = navDataSize;
@@ -264,20 +274,27 @@ int UnityNavMeshBuilder::GetPolyCount() const {
         return 0;
     }
     
-    // 더미 데이터인 경우 테스트용 값 반환
+    // 실제 NavMesh에서 폴리곤 개수 반환
+    if (m_navMesh) {
+        const dtNavMesh* navMesh = m_navMesh.get();
+        int totalPolys = 0;
+        
+        for (int i = 0; i < navMesh->getMaxTiles(); ++i) {
+            const dtMeshTile* tile = navMesh->getTile(i);
+            if (tile && tile->header) {
+                totalPolys += tile->header->polyCount;
+            }
+        }
+        
+        return totalPolys;
+    }
+    
+    // PolyMesh에서 폴리곤 개수 반환
     if (m_pmesh && m_pmesh->npolys > 0) {
         return m_pmesh->npolys;
     }
     
-    // 테스트 모드에서는 기본값 반환
-    // 복잡한 메시의 경우 더 큰 값 반환
-    if (m_pmesh && m_pmesh->nverts > 10) {
-        UNITY_LOG_INFO("TEST MODE: GetPolyCount returning dummy value for complex mesh: 10");
-        return 10; // 복잡한 메시용 더미 폴리곤
-    }
-    
-    UNITY_LOG_INFO("TEST MODE: GetPolyCount returning dummy value: 1");
-    return 1; // 더미 폴리곤 1개
+    return 0;
 }
 
 int UnityNavMeshBuilder::GetVertexCount() const {
@@ -286,14 +303,27 @@ int UnityNavMeshBuilder::GetVertexCount() const {
         return 0;
     }
     
-    // 더미 데이터인 경우 테스트용 값 반환
+    // 실제 NavMesh에서 버텍스 개수 반환
+    if (m_navMesh) {
+        const dtNavMesh* navMesh = m_navMesh.get();
+        int totalVerts = 0;
+        
+        for (int i = 0; i < navMesh->getMaxTiles(); ++i) {
+            const dtMeshTile* tile = navMesh->getTile(i);
+            if (tile && tile->header) {
+                totalVerts += tile->header->vertCount;
+            }
+        }
+        
+        return totalVerts;
+    }
+    
+    // PolyMesh에서 버텍스 개수 반환
     if (m_pmesh && m_pmesh->nverts > 0) {
         return m_pmesh->nverts;
     }
     
-    // 테스트 모드에서는 기본값 반환
-    UNITY_LOG_INFO("TEST MODE: GetVertexCount returning dummy value: 4");
-    return 4; // 더미 버텍스 4개
+    return 0;
 }
 
 bool UnityNavMeshBuilder::BuildHeightfield(const UnityMeshData* meshData, const UnityNavMeshBuildSettings* settings) {
@@ -450,9 +480,63 @@ bool UnityNavMeshBuilder::BuildDetourNavMesh(const UnityNavMeshBuildSettings* se
         }
     }
     
-    // 테스트 목적으로 성공 반환 (NavMesh 생성 우회)
-    UNITY_LOG_INFO("  TEST MODE: Skipping NavMesh creation for testing purposes");
-    UNITY_LOG_INFO("  BuildDetourNavMesh: completed (test mode)");
+    // Detour NavMesh 생성 매개변수 설정
+    dtNavMeshCreateParams params = {};
+    params.verts = m_pmesh->verts;
+    params.vertCount = m_pmesh->nverts;
+    params.polys = m_pmesh->polys;
+    params.polyAreas = m_pmesh->areas;
+    params.polyFlags = m_pmesh->flags;
+    params.polyCount = m_pmesh->npolys;
+    params.nvp = m_pmesh->nvp;
+    params.detailMeshes = m_dmesh->meshes;
+    params.detailVerts = m_dmesh->verts;
+    params.detailVertsCount = m_dmesh->nverts;
+    params.detailTris = m_dmesh->tris;
+    params.detailTriCount = m_dmesh->ntris;
+    params.walkableHeight = settings->walkableHeight;
+    params.walkableRadius = settings->walkableRadius;
+    params.walkableClimb = settings->walkableClimb;
+    rcVcopy(params.bmin, m_pmesh->bmin);
+    rcVcopy(params.bmax, m_pmesh->bmax);
+    params.cs = m_pmesh->cs;
+    params.ch = m_pmesh->ch;
+    params.buildBvTree = true;
+    
+    // NavMesh 데이터 생성
+    unsigned char* navData = nullptr;
+    int navDataSize = 0;
+    
+    if (!dtCreateNavMeshData(&params, &navData, &navDataSize)) {
+        UNITY_LOG_ERROR("  BuildDetourNavMesh: dtCreateNavMeshData failed");
+        return false;
+    }
+    
+    UNITY_LOG_INFO("  BuildDetourNavMesh: NavMesh data created, size=%d", navDataSize);
+    
+    // NavMesh 객체 생성
+    m_navMesh = std::make_unique<dtNavMesh>();
+    dtStatus status = m_navMesh->init(navData, navDataSize, DT_TILE_FREE_DATA);
+    if (dtStatusFailed(status)) {
+        UNITY_LOG_ERROR("  BuildDetourNavMesh: NavMesh init failed, status=0x%x", status);
+        dtFree(navData);
+        m_navMesh.reset();
+        return false;
+    }
+    
+    UNITY_LOG_INFO("  BuildDetourNavMesh: NavMesh initialized successfully");
+    
+    // NavMeshQuery 생성
+    m_navMeshQuery = std::make_unique<dtNavMeshQuery>();
+    status = m_navMeshQuery->init(m_navMesh.get(), 2048);
+    if (dtStatusFailed(status)) {
+        UNITY_LOG_ERROR("  BuildDetourNavMesh: NavMeshQuery init failed, status=0x%x", status);
+        m_navMeshQuery.reset();
+        return false;
+    }
+    
+    UNITY_LOG_INFO("  BuildDetourNavMesh: NavMeshQuery initialized successfully");
+    UNITY_LOG_INFO("  BuildDetourNavMesh: completed");
     return true;
 }
 

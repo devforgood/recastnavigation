@@ -51,23 +51,50 @@ UnityPathResult UnityPathfinding::FindPath(
             return result;
         }
         
-        // 테스트 모드에서 더미 경로 생성
-        UNITY_LOG_INFO("TEST MODE: Creating dummy path from (%.2f,%.2f,%.2f) to (%.2f,%.2f,%.2f)", 
-                      startX, startY, startZ, endX, endY, endZ);
+        // 실제 경로 찾기 수행
+        dtPolyRef path[256];
+        int pathCount = 0;
         
-        // 더미 경로 생성 (시작점과 끝점만 포함)
-        result.pointCount = 2;
-        result.pathPoints = new float[6]; // 2개 포인트 * 3개 좌표
-        result.pathPoints[0] = startX;
-        result.pathPoints[1] = startY;
-        result.pathPoints[2] = startZ;
-        result.pathPoints[3] = endX;
-        result.pathPoints[4] = endY;
-        result.pathPoints[5] = endZ;
+        dtStatus status = m_navMeshQuery->findPath(
+            startRef, endRef,
+            startPt, endPt,
+            &dtQueryFilter(),
+            path, &pathCount, 256
+        );
+        
+        if (dtStatusFailed(status) || pathCount == 0) {
+            result.success = false;
+            result.errorMessage = const_cast<char*>("Path finding failed");
+            return result;
+        }
+        
+        // 경로 포인트들을 실제 좌표로 변환
+        float straightPath[256 * 3];
+        unsigned char straightPathFlags[256];
+        dtPolyRef straightPathPolys[256];
+        int straightPathCount = 0;
+        
+        status = m_navMeshQuery->findStraightPath(
+            startPt, endPt,
+            path, pathCount,
+            straightPath, straightPathFlags, straightPathPolys,
+            &straightPathCount, 256
+        );
+        
+        if (dtStatusFailed(status) || straightPathCount == 0) {
+            result.success = false;
+            result.errorMessage = const_cast<char*>("Path straightening failed");
+            return result;
+        }
+        
+        // 결과 설정
+        result.pointCount = straightPathCount;
+        result.pathPoints = new float[straightPathCount * 3];
+        memcpy(result.pathPoints, straightPath, straightPathCount * 3 * sizeof(float));
         result.success = true;
         result.errorMessage = nullptr;
         
-        UNITY_LOG_INFO("TEST MODE: Dummy path created successfully");
+        UNITY_LOG_INFO("Path found successfully with %d points", straightPathCount);
         
     }
     catch (const std::exception& e) {
@@ -251,14 +278,15 @@ bool UnityPathfinding::FindNearestPoly(float x, float y, float z, dtPolyRef& pol
         return false;
     }
     
-    // 테스트 모드에서 더미 데이터 처리 - NavMesh 상태 확인 없이 즉시 더미 값 반환
-    UNITY_LOG_INFO("TEST MODE: FindNearestPoly called, returning dummy values");
-    polyRef = 1; // 더미 폴리곤 참조
-    if (nearestPt) {
-        nearestPt[0] = x;
-        nearestPt[1] = y;
-        nearestPt[2] = z;
+    float center[3] = { x, y, z };
+    float extents[3] = { 2.0f, 4.0f, 2.0f }; // 검색 범위 설정
+    
+    dtStatus status = m_navMeshQuery->findNearestPoly(center, extents, &dtQueryFilter(), &polyRef, nearestPt);
+    
+    if (dtStatusFailed(status) || polyRef == 0) {
+        return false;
     }
+    
     return true;
 }
 
