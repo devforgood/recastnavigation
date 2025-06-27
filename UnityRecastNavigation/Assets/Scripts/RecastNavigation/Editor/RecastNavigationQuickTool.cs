@@ -425,15 +425,36 @@ namespace RecastNavigation.Editor
         {
             Debug.Log("=== BuildNavMeshWithPreset 시작 ===");
             
-            // 1. 초기화 확인
+            // 1. RecastNavigation 초기화 확인 및 시도
             Debug.Log("1. RecastNavigation 초기화 확인...");
-            if (!RecastNavigationWrapper.Initialize())
+            if (!isInitialized)
             {
-                statusMessage = "RecastNavigation 초기화 실패";
-                Debug.LogError("RecastNavigation 초기화 실패!");
-                return;
+                Debug.Log("RecastNavigation이 초기화되지 않았습니다. 자동 초기화를 시도합니다.");
+                InitializeRecastNavigation();
+                
+                if (!isInitialized)
+                {
+                    string errorMessage = "RecastNavigation 초기화에 실패했습니다.\n\n" +
+                                        "가능한 원인:\n" +
+                                        "1. UnityWrapper.dll이 Assets/Plugins 폴더에 없음\n" +
+                                        "2. DLL이 현재 플랫폼과 호환되지 않음\n" +
+                                        "3. Visual C++ Redistributable 미설치\n\n" +
+                                        "Setup Guide를 사용하여 DLL을 먼저 설치해주세요.";
+                    
+                    EditorUtility.DisplayDialog("초기화 실패", errorMessage, "확인");
+                    statusMessage = "RecastNavigation 초기화 실패";
+                    Debug.LogError("RecastNavigation 자동 초기화 실패!");
+                    return;
+                }
+                else
+                {
+                    Debug.Log("RecastNavigation 자동 초기화 성공!");
+                }
             }
-            Debug.Log("RecastNavigation 초기화 성공");
+            else
+            {
+                Debug.Log("RecastNavigation이 이미 초기화되어 있습니다.");
+            }
             
             // 2. 씬의 모든 Mesh 수집
             Debug.Log("2. 씬의 Mesh 수집 중...");
@@ -523,6 +544,36 @@ namespace RecastNavigation.Editor
         void BuildNavMeshFromSelection()
         {
             Debug.Log("=== BuildNavMeshFromSelection 시작 ===");
+            
+            // 0. RecastNavigation 초기화 확인 및 시도
+            Debug.Log("0. RecastNavigation 초기화 확인...");
+            if (!isInitialized)
+            {
+                Debug.Log("RecastNavigation이 초기화되지 않았습니다. 자동 초기화를 시도합니다.");
+                InitializeRecastNavigation();
+                
+                if (!isInitialized)
+                {
+                    string errorMessage = "RecastNavigation 초기화에 실패했습니다.\n\n" +
+                                        "가능한 원인:\n" +
+                                        "1. UnityWrapper.dll이 Assets/Plugins 폴더에 없음\n" +
+                                        "2. DLL이 현재 플랫폼과 호환되지 않음\n" +
+                                        "3. Visual C++ Redistributable 미설치\n\n" +
+                                        "Setup Guide를 사용하여 DLL을 먼저 설치해주세요.";
+                    
+                    EditorUtility.DisplayDialog("초기화 실패", errorMessage, "확인");
+                    Debug.LogError("RecastNavigation 자동 초기화 실패!");
+                    return;
+                }
+                else
+                {
+                    Debug.Log("RecastNavigation 자동 초기화 성공!");
+                }
+            }
+            else
+            {
+                Debug.Log("RecastNavigation이 이미 초기화되어 있습니다.");
+            }
             
             // 1. 선택된 오브젝트 확인
             Debug.Log("1. 선택된 오브젝트 확인...");

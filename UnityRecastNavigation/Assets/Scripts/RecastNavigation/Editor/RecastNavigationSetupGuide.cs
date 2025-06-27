@@ -459,22 +459,41 @@ namespace RecastNavigation.Editor
                 {
                     Debug.LogWarning($"파일이 사용 중이어서 MD5 비교를 건너뜁니다: {ex.Message}");
                     
-                    // 파일이 사용 중인 경우 사용자에게 확인 요청
-                    bool forceOverwrite = EditorUtility.DisplayDialog(
+                    // 파일을 사용하고 있는 프로세스 확인
+                    string processInfo = GetProcessesUsingFile(destPath);
+                    string dialogMessage = "DLL 파일이 다른 프로세스에서 사용 중입니다.\n" +
+                                         "MD5 비교를 할 수 없어서 파일이 동일한지 확인할 수 없습니다.\n\n";
+                    
+                    if (!string.IsNullOrEmpty(processInfo))
+                    {
+                        dialogMessage += $"사용 중인 프로세스:\n{processInfo}\n\n";
+                    }
+                    
+                    dialogMessage += "해결 방법을 선택하세요:";
+                    
+                    // 3가지 옵션 제공
+                    int choice = EditorUtility.DisplayDialogComplex(
                         "파일 사용 중", 
-                        "DLL 파일이 다른 프로세스에서 사용 중입니다.\n" +
-                        "MD5 비교를 할 수 없어서 파일이 동일한지 확인할 수 없습니다.\n\n" +
-                        "강제로 덮어쓰시겠습니까?\n" +
-                        "(Unity Editor를 재시작하면 문제가 해결될 수 있습니다)", 
+                        dialogMessage,
                         "강제 덮어쓰기", 
-                        "취소"
+                        "취소",
+                        "다른 이름으로 복사"
                     );
                     
-                    if (!forceOverwrite)
+                    if (choice == 1) // 취소
                     {
                         Debug.Log("사용자가 DLL 복사를 취소했습니다.");
                         return;
                     }
+                    else if (choice == 2) // 다른 이름으로 복사
+                    {
+                        if (CopyWithAlternateName(dllPath, destPath))
+                        {
+                            return; // 성공적으로 복사됨
+                        }
+                        // 실패시 강제 덮어쓰기로 진행
+                    }
+                    // choice == 0이면 강제 덮어쓰기로 진행
                 }
                 catch (System.Exception ex)
                 {
@@ -511,12 +530,47 @@ namespace RecastNavigation.Editor
             }
             catch (System.IO.IOException e)
             {
-                string message = e.Message.Contains("being used by another process") 
-                    ? "DLL 파일이 다른 프로세스에서 사용 중입니다.\n\n해결 방법:\n1. Unity Editor 재시작\n2. Visual Studio 등 IDE 종료\n3. 시스템 재시작"
-                    : $"DLL 복사 중 I/O 오류: {e.Message}";
+                if (e.Message.Contains("being used by another process"))
+                {
+                    // Unity가 DLL을 사용 중인 경우 특별 처리
+                    int choice = EditorUtility.DisplayDialogComplex(
+                        "DLL 사용 중", 
+                        "Unity가 DLL을 이미 로드해서 사용하고 있습니다.\n" +
+                        "DLL을 교체하려면 Unity Domain을 다시 로드해야 합니다.\n\n" +
+                        "해결 방법을 선택하세요:",
+                        "Domain Reload 후 복사", 
+                        "취소",
+                        "Unity Editor 재시작 안내"
+                    );
                     
-                EditorUtility.DisplayDialog("파일 I/O 오류", message, "확인");
-                Debug.LogError($"DLL 복사 I/O 오류: {e.Message}");
+                    if (choice == 0) // Domain Reload 후 복사
+                    {
+                        Debug.Log("Domain Reload를 수행한 후 DLL 복사를 재시도합니다.");
+                        ScheduleDllCopyAfterDomainReload();
+                        return;
+                    }
+                    else if (choice == 2) // Unity Editor 재시작 안내
+                    {
+                        EditorUtility.DisplayDialog("Unity Editor 재시작", 
+                            "Unity Editor를 완전히 종료한 후 다시 시작해주세요.\n\n" +
+                            "재시작 후:\n" +
+                            "1. Tools > RecastNavigation > Setup Guide 열기\n" +
+                            "2. DLL 복사 재시도\n\n" +
+                            "이 방법이 가장 확실합니다.", 
+                            "확인");
+                        return;
+                    }
+                    else // 취소
+                    {
+                        Debug.Log("사용자가 DLL 복사를 취소했습니다.");
+                        return;
+                    }
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("파일 I/O 오류", $"DLL 복사 중 I/O 오류: {e.Message}", "확인");
+                    Debug.LogError($"DLL 복사 I/O 오류: {e.Message}");
+                }
             }
             catch (System.Exception e)
             {
@@ -525,6 +579,247 @@ namespace RecastNavigation.Editor
             }
         }
         
+        /// <summary>
+        /// Domain Reload 후 DLL 복사를 스케줄합니다.
+        /// </summary>
+        void ScheduleDllCopyAfterDomainReload()
+        {
+            // EditorPrefs에 복사 예약 정보 저장
+            EditorPrefs.SetString("RecastNavigation_PendingDllCopy_Source", dllPath);
+            EditorPrefs.SetString("RecastNavigation_PendingDllCopy_Dest", Path.Combine("Assets/Plugins/", Path.GetFileName(dllPath)));
+            EditorPrefs.SetBool("RecastNavigation_PendingDllCopy", true);
+            
+            // Domain Reload 이벤트 구독
+            EditorApplication.delayCall += () =>
+            {
+                Debug.Log("Domain Reload를 시작합니다...");
+                
+                // 현재 창 닫기
+                Close();
+                
+                // Domain Reload 실행
+                EditorUtility.RequestScriptReload();
+            };
+        }
+        
+        /// <summary>
+        /// Domain Reload 후 예약된 DLL 복사를 실행합니다.
+        /// </summary>
+        [InitializeOnLoadMethod]
+        static void CheckPendingDllCopy()
+        {
+            if (EditorPrefs.GetBool("RecastNavigation_PendingDllCopy", false))
+            {
+                string sourcePath = EditorPrefs.GetString("RecastNavigation_PendingDllCopy_Source", "");
+                string destPath = EditorPrefs.GetString("RecastNavigation_PendingDllCopy_Dest", "");
+                
+                // 예약 정보 클리어
+                EditorPrefs.DeleteKey("RecastNavigation_PendingDllCopy");
+                EditorPrefs.DeleteKey("RecastNavigation_PendingDllCopy_Source");
+                EditorPrefs.DeleteKey("RecastNavigation_PendingDllCopy_Dest");
+                
+                if (!string.IsNullOrEmpty(sourcePath) && !string.IsNullOrEmpty(destPath))
+                {
+                    EditorApplication.delayCall += () => ExecutePendingDllCopy(sourcePath, destPath);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 예약된 DLL 복사를 실행합니다.
+        /// </summary>
+        static void ExecutePendingDllCopy(string sourcePath, string destPath)
+        {
+            try
+            {
+                Debug.Log($"Domain Reload 후 DLL 복사를 시작합니다: {sourcePath} -> {destPath}");
+                
+                if (!File.Exists(sourcePath))
+                {
+                    EditorUtility.DisplayDialog("오류", $"소스 DLL 파일을 찾을 수 없습니다:\n{sourcePath}", "확인");
+                    return;
+                }
+                
+                // Plugins 폴더 생성
+                string pluginsDir = Path.GetDirectoryName(destPath);
+                if (!Directory.Exists(pluginsDir))
+                {
+                    Directory.CreateDirectory(pluginsDir);
+                }
+                
+                // DLL 복사
+                File.Copy(sourcePath, destPath, true);
+                AssetDatabase.Refresh();
+                
+                Debug.Log($"Domain Reload 후 DLL 복사 완료: {destPath}");
+                
+                // 성공 알림 및 Setup Guide 다시 열기
+                EditorUtility.DisplayDialog("성공", 
+                    "Domain Reload 후 DLL이 성공적으로 복사되었습니다!\n\n" +
+                    "Setup Guide를 다시 열어서 다음 단계를 진행하세요.", 
+                    "Setup Guide 열기");
+                
+                // Setup Guide 다시 열기
+                ShowWindow();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"Domain Reload 후 DLL 복사 실패: {e.Message}");
+                EditorUtility.DisplayDialog("오류", 
+                    $"Domain Reload 후에도 DLL 복사에 실패했습니다:\n{e.Message}\n\n" +
+                    "Unity Editor를 완전히 재시작해보세요.", 
+                    "확인");
+            }
+        }
+
+        /// <summary>
+        /// 파일을 사용하고 있는 프로세스 목록을 가져옵니다.
+        /// </summary>
+        /// <param name="filePath">확인할 파일 경로</param>
+        /// <returns>프로세스 정보 문자열</returns>
+        string GetProcessesUsingFile(string filePath)
+        {
+            try
+            {
+                // handle.exe 도구를 사용하여 파일을 사용하는 프로세스 확인
+                // (Windows Sysinternals 도구가 설치되어 있는 경우)
+                var processStartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "handle.exe",
+                    Arguments = $"\"{filePath}\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using (var process = System.Diagnostics.Process.Start(processStartInfo))
+                {
+                    if (process != null)
+                    {
+                        string output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit();
+                        
+                        if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                        {
+                            return ParseHandleOutput(output);
+                        }
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"프로세스 확인 중 오류: {ex.Message}");
+            }
+
+            // handle.exe가 없거나 실패한 경우 일반적인 프로세스들 확인
+            return GetCommonProcessesInfo(filePath);
+        }
+
+        /// <summary>
+        /// handle.exe 출력을 파싱합니다.
+        /// </summary>
+        string ParseHandleOutput(string output)
+        {
+            var lines = output.Split('\n');
+            var processes = new System.Collections.Generic.List<string>();
+            
+            foreach (var line in lines)
+            {
+                if (line.Contains(".exe") && line.Contains("pid:"))
+                {
+                    processes.Add(line.Trim());
+                }
+            }
+            
+            return processes.Count > 0 ? string.Join("\n", processes) : "";
+        }
+
+        /// <summary>
+        /// 일반적으로 DLL을 사용할 수 있는 프로세스들을 확인합니다.
+        /// </summary>
+        string GetCommonProcessesInfo(string filePath)
+        {
+            var runningProcesses = new System.Collections.Generic.List<string>();
+            string fileName = Path.GetFileName(filePath);
+            
+            try
+            {
+                var processes = System.Diagnostics.Process.GetProcesses();
+                foreach (var process in processes)
+                {
+                    try
+                    {
+                        if (process.ProcessName.ToLower().Contains("unity") ||
+                            process.ProcessName.ToLower().Contains("devenv") ||
+                            process.ProcessName.ToLower().Contains("code") ||
+                            process.ProcessName.ToLower().Contains("rider"))
+                        {
+                            runningProcesses.Add($"{process.ProcessName} (PID: {process.Id})");
+                        }
+                    }
+                    catch
+                    {
+                        // 일부 프로세스는 접근이 제한될 수 있음
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"프로세스 목록 확인 중 오류: {ex.Message}");
+            }
+
+            if (runningProcesses.Count > 0)
+            {
+                return "의심되는 프로세스들:\n" + string.Join("\n", runningProcesses);
+            }
+            
+            return "Unity, Visual Studio, VS Code, Rider 등이 실행 중인지 확인해보세요.";
+        }
+
+        /// <summary>
+        /// 파일을 다른 이름으로 복사합니다.
+        /// </summary>
+        bool CopyWithAlternateName(string sourcePath, string destPath)
+        {
+            try
+            {
+                string directory = Path.GetDirectoryName(destPath);
+                string fileName = Path.GetFileNameWithoutExtension(destPath);
+                string extension = Path.GetExtension(destPath);
+                
+                // 기존 파일을 백업으로 이름 변경
+                string backupPath = Path.Combine(directory, $"{fileName}_backup_{System.DateTime.Now:yyyyMMdd_HHmmss}{extension}");
+                
+                if (File.Exists(destPath))
+                {
+                    File.Move(destPath, backupPath);
+                    Debug.Log($"기존 파일을 백업으로 이동: {backupPath}");
+                }
+                
+                // 새 파일 복사
+                File.Copy(sourcePath, destPath, false);
+                AssetDatabase.Refresh();
+                
+                dllCopied = true;
+                completedSteps[0] = true;
+                SaveSettings();
+                
+                EditorUtility.DisplayDialog("성공", 
+                    $"DLL이 성공적으로 복사되었습니다.\n기존 파일은 백업되었습니다:\n{backupPath}", 
+                    "확인");
+                Debug.Log($"DLL 복사 완료 (백업 방식): {destPath}");
+                
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                EditorUtility.DisplayDialog("오류", $"백업 복사 실패: {ex.Message}", "확인");
+                Debug.LogError($"백업 복사 실패: {ex.Message}");
+                return false;
+            }
+        }
+
         /// <summary>
         /// 파일의 MD5 해시 값을 계산합니다.
         /// </summary>
@@ -541,20 +836,22 @@ namespace RecastNavigation.Editor
             
             for (int retry = 0; retry < maxRetries; retry++)
             {
+                FileStream stream = null;
+                MD5 md5 = null;
+                
                 try
                 {
-                    using (var md5 = MD5.Create())
-                    {
-                        // 공유 읽기 모드로 파일 열기 (다른 프로세스가 읽기 중이어도 접근 가능)
-                        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                        {
-                            Debug.Log($"파일 스트림 열기 성공 (시도 {retry + 1}): {filePath}");
-                            byte[] hash = md5.ComputeHash(stream);
-                            string hashString = System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-                            Debug.Log($"MD5 해시 계산 완료: {hashString}");
-                            return hashString;
-                        }
-                    }
+                    md5 = MD5.Create();
+                    
+                    // 공유 읽기 모드로 파일 열기 (다른 프로세스가 읽기 중이어도 접근 가능)
+                    stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    Debug.Log($"파일 스트림 열기 성공 (시도 {retry + 1}): {filePath}");
+                    
+                    byte[] hash = md5.ComputeHash(stream);
+                    string hashString = System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                    
+                    Debug.Log($"MD5 해시 계산 완료: {hashString}");
+                    return hashString;
                 }
                 catch (System.IO.IOException ex) when (retry < maxRetries - 1)
                 {
@@ -574,6 +871,26 @@ namespace RecastNavigation.Editor
                     Debug.LogError($"MD5 계산 예상치 못한 오류 (시도 {retry + 1}): {ex.GetType().Name} - {ex.Message}");
                     if (retry == maxRetries - 1) throw;
                     System.Threading.Thread.Sleep(retryDelayMs);
+                }
+                finally
+                {
+                    // 명시적으로 리소스 해제
+                    try
+                    {
+                        stream?.Close();
+                        stream?.Dispose();
+                        md5?.Dispose();
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"리소스 해제 중 오류: {ex.Message}");
+                    }
+                    
+                    // 가비지 컬렉션 강제 실행으로 파일 핸들 완전히 해제
+                    System.GC.Collect();
+                    System.GC.WaitForPendingFinalizers();
+                    
+                    Debug.Log($"파일 핸들 해제 완료 (시도 {retry + 1}): {filePath}");
                 }
             }
             

@@ -374,10 +374,22 @@ namespace RecastNavigation
         /// </summary>
         public bool BuildNavMesh(Vector3[] vertices, int[] indices)
         {
+            // 초기화 확인 및 자동 시도
             if (!isInitialized)
             {
-                Debug.LogError("RecastNavigation이 초기화되지 않았습니다.");
-                return false;
+                Debug.Log("RecastNavigation이 초기화되지 않았습니다. 자동 초기화를 시도합니다.");
+                InitializeRecastNavigation();
+                
+                if (!isInitialized)
+                {
+                    Debug.LogError("RecastNavigation 자동 초기화에 실패했습니다. Setup Guide를 사용하여 DLL을 설치해주세요.");
+                    OnError?.Invoke("RecastNavigation 초기화 실패");
+                    return false;
+                }
+                else
+                {
+                    Debug.Log("RecastNavigation 자동 초기화 성공!");
+                }
             }
 
             if (vertices == null || indices == null || vertices.Length == 0 || indices.Length == 0)
@@ -476,10 +488,22 @@ namespace RecastNavigation
         /// </summary>
         public bool LoadNavMesh(byte[] data)
         {
+            // 초기화 확인 및 자동 시도
             if (!isInitialized)
             {
-                Debug.LogError("RecastNavigation이 초기화되지 않았습니다.");
-                return false;
+                Debug.Log("RecastNavigation이 초기화되지 않았습니다. 자동 초기화를 시도합니다.");
+                InitializeRecastNavigation();
+                
+                if (!isInitialized)
+                {
+                    Debug.LogError("RecastNavigation 자동 초기화에 실패했습니다. Setup Guide를 사용하여 DLL을 설치해주세요.");
+                    OnError?.Invoke("RecastNavigation 초기화 실패");
+                    return false;
+                }
+                else
+                {
+                    Debug.Log("RecastNavigation 자동 초기화 성공!");
+                }
             }
 
             if (data == null || data.Length == 0)
@@ -525,9 +549,21 @@ namespace RecastNavigation
         /// </summary>
         public PathfindingResult FindPath(Vector3 start, Vector3 end)
         {
+            // 초기화 확인 및 자동 시도
             if (!isInitialized)
             {
-                return new PathfindingResult { Success = false, ErrorMessage = "RecastNavigation이 초기화되지 않았습니다." };
+                Debug.Log("RecastNavigation이 초기화되지 않았습니다. 자동 초기화를 시도합니다.");
+                InitializeRecastNavigation();
+                
+                if (!isInitialized)
+                {
+                    Debug.LogError("RecastNavigation 자동 초기화에 실패했습니다. Setup Guide를 사용하여 DLL을 설치해주세요.");
+                    return new PathfindingResult { Success = false, ErrorMessage = "RecastNavigation 초기화 실패" };
+                }
+                else
+                {
+                    Debug.Log("RecastNavigation 자동 초기화 성공!");
+                }
             }
 
             if (navMeshData == null)
