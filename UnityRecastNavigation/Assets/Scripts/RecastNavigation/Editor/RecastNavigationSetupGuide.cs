@@ -425,29 +425,75 @@ namespace RecastNavigation.Editor
             
             try
             {
-                // 대상 파일이 이미 존재하는 경우 MD5 해시 비교
-                if (File.Exists(destPath))
+                // 먼저 두 파일을 MD5로 비교
+                bool filesAreIdentical = false;
+                try
                 {
                     string sourceMD5 = GetFileMD5Hash(dllPath);
-                    string destMD5 = GetFileMD5Hash(destPath);
                     
-                    if (sourceMD5 == destMD5)
+                    // 대상 파일이 존재하는 경우에만 비교
+                    if (File.Exists(destPath))
                     {
-                        // 파일이 동일하면 복사하지 않고 성공 처리
-                        dllCopied = true;
-                        completedSteps[0] = true;
-                        SaveSettings(); // 설정 자동 저장
+                        string destMD5 = GetFileMD5Hash(destPath);
                         
-                        EditorUtility.DisplayDialog("성공", "DLL 파일이 이미 최신 상태입니다. 복사를 건너뜁니다.", "확인");
-                        Debug.Log($"DLL 파일이 이미 최신 상태입니다. MD5: {sourceMD5}");
-                        return;
+                        if (sourceMD5 == destMD5)
+                        {
+                            filesAreIdentical = true;
+                            Debug.Log($"두 파일이 동일합니다. MD5: {sourceMD5}");
+                        }
+                        else
+                        {
+                            Debug.Log($"파일이 다릅니다. 소스 MD5: {sourceMD5}, 대상 MD5: {destMD5}");
+                        }
                     }
                     else
                     {
-                        Debug.Log($"DLL 파일이 다릅니다. 소스 MD5: {sourceMD5}, 대상 MD5: {destMD5}");
+                        Debug.Log($"대상 파일이 없습니다. 소스 MD5: {sourceMD5}");
                     }
                 }
+                catch (System.UnauthorizedAccessException ex)
+                {
+                    Debug.LogWarning($"파일 접근 권한이 없어서 MD5 비교를 건너뜁니다: {ex.Message}");
+                }
+                catch (System.IO.IOException ex)
+                {
+                    Debug.LogWarning($"파일이 사용 중이어서 MD5 비교를 건너뜁니다: {ex.Message}");
+                    
+                    // 파일이 사용 중인 경우 사용자에게 확인 요청
+                    bool forceOverwrite = EditorUtility.DisplayDialog(
+                        "파일 사용 중", 
+                        "DLL 파일이 다른 프로세스에서 사용 중입니다.\n" +
+                        "MD5 비교를 할 수 없어서 파일이 동일한지 확인할 수 없습니다.\n\n" +
+                        "강제로 덮어쓰시겠습니까?\n" +
+                        "(Unity Editor를 재시작하면 문제가 해결될 수 있습니다)", 
+                        "강제 덮어쓰기", 
+                        "취소"
+                    );
+                    
+                    if (!forceOverwrite)
+                    {
+                        Debug.Log("사용자가 DLL 복사를 취소했습니다.");
+                        return;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"MD5 비교 중 예상치 못한 오류: {ex.Message}");
+                }
                 
+                // 파일이 동일하면 복사 스킵
+                if (filesAreIdentical)
+                {
+                    dllCopied = true;
+                    completedSteps[0] = true;
+                    SaveSettings(); // 설정 자동 저장
+                    
+                    EditorUtility.DisplayDialog("성공", "DLL 파일이 이미 최신 상태입니다. 복사를 건너뜁니다.", "확인");
+                    Debug.Log("DLL 파일이 이미 최신 상태입니다. 복사를 건너뜁니다.");
+                    return;
+                }
+                
+                // 파일이 다르거나 비교할 수 없는 경우 복사 진행
                 File.Copy(dllPath, destPath, true);
                 AssetDatabase.Refresh();
                 
@@ -457,6 +503,20 @@ namespace RecastNavigation.Editor
                 
                 EditorUtility.DisplayDialog("성공", "DLL이 성공적으로 복사되었습니다.", "확인");
                 Debug.Log($"DLL 복사 완료: {destPath}");
+            }
+            catch (System.UnauthorizedAccessException e)
+            {
+                EditorUtility.DisplayDialog("권한 오류", $"DLL 복사 권한이 없습니다: {e.Message}\n\nUnity Editor를 관리자 권한으로 실행해보세요.", "확인");
+                Debug.LogError($"DLL 복사 권한 오류: {e.Message}");
+            }
+            catch (System.IO.IOException e)
+            {
+                string message = e.Message.Contains("being used by another process") 
+                    ? "DLL 파일이 다른 프로세스에서 사용 중입니다.\n\n해결 방법:\n1. Unity Editor 재시작\n2. Visual Studio 등 IDE 종료\n3. 시스템 재시작"
+                    : $"DLL 복사 중 I/O 오류: {e.Message}";
+                    
+                EditorUtility.DisplayDialog("파일 I/O 오류", message, "확인");
+                Debug.LogError($"DLL 복사 I/O 오류: {e.Message}");
             }
             catch (System.Exception e)
             {
@@ -470,16 +530,55 @@ namespace RecastNavigation.Editor
         /// </summary>
         /// <param name="filePath">파일 경로</param>
         /// <returns>MD5 해시 문자열</returns>
+        /// <exception cref="System.IO.IOException">파일이 사용 중이거나 접근할 수 없는 경우</exception>
+        /// <exception cref="System.UnauthorizedAccessException">파일 접근 권한이 없는 경우</exception>
         string GetFileMD5Hash(string filePath)
         {
-            using (var md5 = MD5.Create())
+            const int maxRetries = 3;
+            const int retryDelayMs = 100;
+            
+            Debug.Log($"MD5 해시 계산 시작: {filePath}");
+            
+            for (int retry = 0; retry < maxRetries; retry++)
             {
-                using (var stream = File.OpenRead(filePath))
+                try
                 {
-                    byte[] hash = md5.ComputeHash(stream);
-                    return System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                    using (var md5 = MD5.Create())
+                    {
+                        // 공유 읽기 모드로 파일 열기 (다른 프로세스가 읽기 중이어도 접근 가능)
+                        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            Debug.Log($"파일 스트림 열기 성공 (시도 {retry + 1}): {filePath}");
+                            byte[] hash = md5.ComputeHash(stream);
+                            string hashString = System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                            Debug.Log($"MD5 해시 계산 완료: {hashString}");
+                            return hashString;
+                        }
+                    }
+                }
+                catch (System.IO.IOException ex) when (retry < maxRetries - 1)
+                {
+                    // 마지막 시도가 아닌 경우에만 재시도
+                    Debug.LogWarning($"MD5 계산 재시도 {retry + 1}/{maxRetries} (IOException): {ex.Message}");
+                    System.Threading.Thread.Sleep(retryDelayMs);
+                    continue;
+                }
+                catch (System.UnauthorizedAccessException ex)
+                {
+                    // 권한 오류는 재시도해도 의미 없음
+                    Debug.LogError($"MD5 계산 권한 오류: {ex.Message}");
+                    throw;
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"MD5 계산 예상치 못한 오류 (시도 {retry + 1}): {ex.GetType().Name} - {ex.Message}");
+                    if (retry == maxRetries - 1) throw;
+                    System.Threading.Thread.Sleep(retryDelayMs);
                 }
             }
+            
+            // 모든 재시도 실패 시 예외를 다시 던짐
+            throw new System.IO.IOException($"파일 '{filePath}'의 MD5 해시를 계산할 수 없습니다. 파일이 사용 중이거나 접근할 수 없습니다.");
         }
         
         void ImportScripts()
