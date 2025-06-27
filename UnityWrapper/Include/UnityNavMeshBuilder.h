@@ -1,12 +1,14 @@
 #pragma once
 
 #include "UnityRecastWrapper.h"
+#include "UnityLog.h"
 #include "Recast.h"
 #include "DetourNavMesh.h"
 #include "DetourNavMeshBuilder.h"
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <cstdint>
 
 class UnityNavMeshBuilder {
 public:
@@ -28,16 +30,16 @@ public:
             return m_navMesh.get(); 
         }
         // 테스트 모드에서는 더미 포인터 반환 (실제로는 사용되지 않음)
-        std::cout << "TEST MODE: GetNavMesh returning dummy pointer" << std::endl;
-        return reinterpret_cast<dtNavMesh*>(0x12345678); // 더미 포인터
+        UNITY_LOG_INFO("TEST MODE: GetNavMesh returning dummy pointer");
+        return reinterpret_cast<dtNavMesh*>(static_cast<uintptr_t>(0x12345678)); // 더미 포인터
     }
     dtNavMeshQuery* GetNavMeshQuery() const { 
         if (m_navMeshQuery) {
             return m_navMeshQuery.get(); 
         }
         // 테스트 모드에서는 더미 포인터 반환 (실제로는 사용되지 않음)
-        std::cout << "TEST MODE: GetNavMeshQuery returning dummy pointer" << std::endl;
-        return reinterpret_cast<dtNavMeshQuery*>(0x87654321); // 더미 포인터
+        UNITY_LOG_INFO("TEST MODE: GetNavMeshQuery returning dummy pointer");
+        return reinterpret_cast<dtNavMeshQuery*>(static_cast<uintptr_t>(0x87654321)); // 더미 포인터
     }
     
     int GetPolyCount() const;

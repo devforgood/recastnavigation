@@ -1,5 +1,7 @@
 #include "UnityPathfinding.h"
+#include "UnityLog.h"
 #include "DetourNavMeshQuery.h"
+#include "DetourNavMesh.h"
 #include "Recast.h"
 #include <cmath>
 #include <algorithm>
@@ -50,8 +52,8 @@ UnityPathResult UnityPathfinding::FindPath(
         }
         
         // 테스트 모드에서 더미 경로 생성
-        std::cout << "TEST MODE: Creating dummy path from (" << startX << "," << startY << "," << startZ 
-                  << ") to (" << endX << "," << endY << "," << endZ << ")" << std::endl;
+        UNITY_LOG_INFO("TEST MODE: Creating dummy path from (%.2f,%.2f,%.2f) to (%.2f,%.2f,%.2f)", 
+                      startX, startY, startZ, endX, endY, endZ);
         
         // 더미 경로 생성 (시작점과 끝점만 포함)
         result.pointCount = 2;
@@ -65,7 +67,7 @@ UnityPathResult UnityPathfinding::FindPath(
         result.success = true;
         result.errorMessage = nullptr;
         
-        std::cout << "TEST MODE: Dummy path created successfully" << std::endl;
+        UNITY_LOG_INFO("TEST MODE: Dummy path created successfully");
         
     }
     catch (const std::exception& e) {
@@ -250,7 +252,7 @@ bool UnityPathfinding::FindNearestPoly(float x, float y, float z, dtPolyRef& pol
     }
     
     // 테스트 모드에서 더미 데이터 처리 - NavMesh 상태 확인 없이 즉시 더미 값 반환
-    std::cout << "TEST MODE: FindNearestPoly called, returning dummy values" << std::endl;
+    UNITY_LOG_INFO("TEST MODE: FindNearestPoly called, returning dummy values");
     polyRef = 1; // 더미 폴리곤 참조
     if (nearestPt) {
         nearestPt[0] = x;

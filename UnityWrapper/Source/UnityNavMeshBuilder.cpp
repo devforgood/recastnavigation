@@ -1,4 +1,5 @@
 #include "UnityNavMeshBuilder.h"
+#include "UnityLog.h"
 #include "Recast.h"
 #include "DetourNavMesh.h"
 #include "DetourNavMeshBuilder.h"
@@ -22,14 +23,14 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
     UnityNavMeshResult result = {0};
     
     if (!meshData) {
-        std::cout << "ERROR: meshData is null" << std::endl;
+        UNITY_LOG_ERROR("BuildNavMesh: meshData is null");
         result.success = false;
         result.errorMessage = const_cast<char*>("Mesh data is null");
         return result;
     }
     
     if (!settings) {
-        std::cout << "ERROR: settings is null" << std::endl;
+        UNITY_LOG_ERROR("BuildNavMesh: settings is null");
         result.success = false;
         result.errorMessage = const_cast<char*>("Settings is null");
         return result;
@@ -37,8 +38,8 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
     
     // 메시 데이터 유효성 검사
     if (meshData->vertexCount <= 0 || meshData->indexCount <= 0) {
-        std::cout << "ERROR: Invalid mesh data - vertexCount=" << meshData->vertexCount 
-                  << ", indexCount=" << meshData->indexCount << std::endl;
+        UNITY_LOG_ERROR("BuildNavMesh: Invalid mesh data - vertexCount=%d, indexCount=%d", 
+                       meshData->vertexCount, meshData->indexCount);
         result.success = false;
         result.errorMessage = const_cast<char*>("Invalid mesh data");
         return result;
@@ -47,16 +48,18 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
     // 메시 데이터 저장
     m_meshData = meshData;
     
-    std::cout << "=== BuildNavMesh Start ===" << std::endl;
-    std::cout << "MeshData: vertexCount=" << meshData->vertexCount << ", indexCount=" << meshData->indexCount << std::endl;
+    UNITY_LOG_INFO("=== BuildNavMesh Start ===");
+    UNITY_LOG_INFO("MeshData: vertexCount=%d, indexCount=%d", meshData->vertexCount, meshData->indexCount);
     LogBuildSettings(settings);
     
     // 안전한 로그 출력
-    std::cout << "Settings: cellSize=" << settings->cellSize << ", cellHeight=" << settings->cellHeight << std::endl;
-    std::cout << "Settings: walkableHeight=" << settings->walkableHeight << ", walkableRadius=" << settings->walkableRadius << std::endl;
+    UNITY_LOG_DEBUG("Settings: cellSize=%.3f, cellHeight=%.3f", settings->cellSize, settings->cellHeight);
+    UNITY_LOG_DEBUG("Settings: walkableHeight=%.3f, walkableRadius=%.3f", settings->walkableHeight, settings->walkableRadius);
     
     if (!meshData->vertices || !meshData->indices) {
-        std::cout << "ERROR: Invalid mesh pointers - vertices=" << (meshData->vertices ? "valid" : "null") << ", indices=" << (meshData->indices ? "valid" : "null") << std::endl;
+        UNITY_LOG_ERROR("BuildNavMesh: Invalid mesh pointers - vertices=%s, indices=%s", 
+                       (meshData->vertices ? "valid" : "null"), 
+                       (meshData->indices ? "valid" : "null"));
         result.success = false;
         result.errorMessage = const_cast<char*>("Invalid mesh pointers");
         return result;
@@ -67,62 +70,62 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
     
     try {
         // 빌드 과정 실행
-        std::cout << "1. BuildHeightfield starting..." << std::endl;
+        UNITY_LOG_INFO("1. BuildHeightfield starting...");
         if (!BuildHeightfield(meshData, settings)) {
-            std::cout << "[BuildNavMesh] BuildHeightfield failed" << std::endl;
+            UNITY_LOG_ERROR("BuildNavMesh: BuildHeightfield failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build heightfield");
             return result;
         }
-        std::cout << "1. BuildHeightfield success" << std::endl;
+        UNITY_LOG_INFO("1. BuildHeightfield success");
         
-        std::cout << "2. BuildCompactHeightfield starting..." << std::endl;
+        UNITY_LOG_INFO("2. BuildCompactHeightfield starting...");
         if (!BuildCompactHeightfield(settings)) {
-            std::cout << "[BuildNavMesh] BuildCompactHeightfield failed" << std::endl;
+            UNITY_LOG_ERROR("BuildNavMesh: BuildCompactHeightfield failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build compact heightfield");
             return result;
         }
-        std::cout << "2. BuildCompactHeightfield success" << std::endl;
+        UNITY_LOG_INFO("2. BuildCompactHeightfield success");
         
-        std::cout << "3. BuildContourSet starting..." << std::endl;
+        UNITY_LOG_INFO("3. BuildContourSet starting...");
         if (!BuildContourSet(settings)) {
-            std::cout << "[BuildNavMesh] BuildContourSet failed" << std::endl;
+            UNITY_LOG_ERROR("BuildNavMesh: BuildContourSet failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build contour set");
             return result;
         }
-        std::cout << "3. BuildContourSet success" << std::endl;
+        UNITY_LOG_INFO("3. BuildContourSet success");
         
-        std::cout << "4. BuildPolyMesh starting..." << std::endl;
+        UNITY_LOG_INFO("4. BuildPolyMesh starting...");
         if (!BuildPolyMesh(settings)) {
-            std::cout << "[BuildNavMesh] BuildPolyMesh failed" << std::endl;
+            UNITY_LOG_ERROR("BuildNavMesh: BuildPolyMesh failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build poly mesh");
             return result;
         }
-        std::cout << "4. BuildPolyMesh success" << std::endl;
+        UNITY_LOG_INFO("4. BuildPolyMesh success");
         
-        std::cout << "5. BuildDetailMesh starting..." << std::endl;
+        UNITY_LOG_INFO("5. BuildDetailMesh starting...");
         if (!BuildDetailMesh(settings)) {
-            std::cout << "[BuildNavMesh] BuildDetailMesh failed" << std::endl;
+            UNITY_LOG_ERROR("BuildNavMesh: BuildDetailMesh failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build detail mesh");
             return result;
         }
-        std::cout << "5. BuildDetailMesh success" << std::endl;
+        UNITY_LOG_INFO("5. BuildDetailMesh success");
         
-        std::cout << "6. BuildDetourNavMesh starting..." << std::endl;
+        UNITY_LOG_INFO("6. BuildDetourNavMesh starting...");
         if (!BuildDetourNavMesh(settings)) {
-            std::cout << "[BuildNavMesh] BuildDetourNavMesh failed" << std::endl;
+            UNITY_LOG_ERROR("BuildNavMesh: BuildDetourNavMesh failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build detour nav mesh");
             return result;
         }
-        std::cout << "6. BuildDetourNavMesh success" << std::endl;
+        UNITY_LOG_INFO("6. BuildDetourNavMesh success");
         
         // NavMesh 데이터 직렬화
-        std::cout << "7. NavMesh data serialization starting..." << std::endl;
+        UNITY_LOG_INFO("7. NavMesh data serialization starting...");
         unsigned char* navData = nullptr;
         int navDataSize = 0;
         
@@ -140,23 +143,23 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
         header[4] = 1; // layer
         
         navDataSize = dummyDataSize;
-        std::cout << "TEST MODE: Created dummy NavMesh data, size=" << navDataSize << std::endl;
+        UNITY_LOG_INFO("TEST MODE: Created dummy NavMesh data, size=%d", navDataSize);
         
         result.navMeshData = navData;
         result.dataSize = navDataSize;
         result.success = true;
         result.errorMessage = nullptr;
         
-        std::cout << "=== BuildNavMesh completed successfully ===" << std::endl;
+        UNITY_LOG_INFO("=== BuildNavMesh completed successfully ===");
         
     }
     catch (const std::exception& e) {
-        std::cout << "EXCEPTION: " << e.what() << std::endl;
+        UNITY_LOG_ERROR("BuildNavMesh: EXCEPTION - %s", e.what());
         result.success = false;
         result.errorMessage = const_cast<char*>(e.what());
     }
     catch (...) {
-        std::cout << "UNKNOWN EXCEPTION" << std::endl;
+        UNITY_LOG_ERROR("BuildNavMesh: UNKNOWN EXCEPTION");
         result.success = false;
         result.errorMessage = const_cast<char*>("Unknown error during nav mesh building");
     }
@@ -177,7 +180,7 @@ bool UnityNavMeshBuilder::LoadNavMesh(const unsigned char* data, int dataSize) {
             const unsigned int* header = reinterpret_cast<const unsigned int*>(data);
             if (header[0] == ('M' | ('N' << 8) | ('A' << 16) | ('V' << 24))) {
                 // 더미 데이터 - 테스트 모드로 처리
-                std::cout << "TEST MODE: Loading dummy NavMesh data" << std::endl;
+                UNITY_LOG_INFO("TEST MODE: Loading dummy NavMesh data");
                 
                 // 기존 객체들을 안전하게 해제
                 if (m_navMeshQuery) {
@@ -196,18 +199,18 @@ bool UnityNavMeshBuilder::LoadNavMesh(const unsigned char* data, int dataSize) {
                 dtStatus status = m_navMesh->init(navData, dataSize, 0);
                 
                 if (dtStatusFailed(status)) {
-                    std::cout << "TEST MODE: Dummy NavMesh init failed, but continuing for test" << std::endl;
+                    UNITY_LOG_INFO("TEST MODE: Dummy NavMesh init failed, but continuing for test");
                     // 테스트 모드에서는 실패해도 계속 진행
                 }
                 
                 m_navMeshQuery = std::make_unique<dtNavMeshQuery>();
                 status = m_navMeshQuery->init(m_navMesh.get(), 2048);
                 if (dtStatusFailed(status)) {
-                    std::cout << "TEST MODE: Dummy NavMeshQuery init failed, but continuing for test" << std::endl;
+                    UNITY_LOG_INFO("TEST MODE: Dummy NavMeshQuery init failed, but continuing for test");
                     // 테스트 모드에서는 실패해도 계속 진행
                 }
                 
-                std::cout << "TEST MODE: Dummy NavMesh loaded successfully" << std::endl;
+                UNITY_LOG_INFO("TEST MODE: Dummy NavMesh loaded successfully");
                 return true;
             }
         }
@@ -269,11 +272,11 @@ int UnityNavMeshBuilder::GetPolyCount() const {
     // 테스트 모드에서는 기본값 반환
     // 복잡한 메시의 경우 더 큰 값 반환
     if (m_pmesh && m_pmesh->nverts > 10) {
-        std::cout << "TEST MODE: GetPolyCount returning dummy value for complex mesh: 10" << std::endl;
+        UNITY_LOG_INFO("TEST MODE: GetPolyCount returning dummy value for complex mesh: 10");
         return 10; // 복잡한 메시용 더미 폴리곤
     }
     
-    std::cout << "TEST MODE: GetPolyCount returning dummy value: 1" << std::endl;
+    UNITY_LOG_INFO("TEST MODE: GetPolyCount returning dummy value: 1");
     return 1; // 더미 폴리곤 1개
 }
 
@@ -289,12 +292,12 @@ int UnityNavMeshBuilder::GetVertexCount() const {
     }
     
     // 테스트 모드에서는 기본값 반환
-    std::cout << "TEST MODE: GetVertexCount returning dummy value: 4" << std::endl;
+    UNITY_LOG_INFO("TEST MODE: GetVertexCount returning dummy value: 4");
     return 4; // 더미 버텍스 4개
 }
 
 bool UnityNavMeshBuilder::BuildHeightfield(const UnityMeshData* meshData, const UnityNavMeshBuildSettings* settings) {
-    std::cout << "  BuildHeightfield: start" << std::endl;
+    UNITY_LOG_INFO("  BuildHeightfield: start");
     
     // 바운딩 박스 계산
     float bmin[3] = { FLT_MAX, FLT_MAX, FLT_MAX };
@@ -310,58 +313,58 @@ bool UnityNavMeshBuilder::BuildHeightfield(const UnityMeshData* meshData, const 
         bmax[2] = std::max(bmax[2], v[2]);
     }
     
-    std::cout << "  BoundingBox: bmin=[" << bmin[0] << "," << bmin[1] << "," << bmin[2] << "]" << std::endl;
-    std::cout << "  BoundingBox: bmax=[" << bmax[0] << "," << bmax[1] << "," << bmax[2] << "]" << std::endl;
+    UNITY_LOG_INFO("  BoundingBox: bmin=[%.2f,%.2f,%.2f]", bmin[0], bmin[1], bmin[2]);
+    UNITY_LOG_INFO("  BoundingBox: bmax=[%.2f,%.2f,%.2f]", bmax[0], bmax[1], bmax[2]);
     
     // Heightfield 생성
     m_solid = std::make_unique<rcHeightfield>();
     int width = static_cast<int>((bmax[0] - bmin[0]) / settings->cellSize + 1);
     int height = static_cast<int>((bmax[2] - bmin[2]) / settings->cellSize + 1);
     
-    std::cout << "  Heightfield size: width=" << width << ", height=" << height << std::endl;
-    std::cout << "  rcCreateHeightfield calling..." << std::endl;
+    UNITY_LOG_INFO("  Heightfield size: width=%d, height=%d", width, height);
+    UNITY_LOG_INFO("  rcCreateHeightfield calling...");
     
     if (!rcCreateHeightfield(m_ctx.get(), *m_solid, width, height, bmin, bmax, settings->cellSize, settings->cellHeight)) {
-        std::cout << "  ERROR: rcCreateHeightfield failed" << std::endl;
+        UNITY_LOG_ERROR("  ERROR: rcCreateHeightfield failed");
         return false;
     }
-    std::cout << "  rcCreateHeightfield success" << std::endl;
+    UNITY_LOG_INFO("  rcCreateHeightfield success");
     
     // 삼각형 영역 분류
-    std::cout << "  rcMarkWalkableTriangles calling..." << std::endl;
+    UNITY_LOG_INFO("  rcMarkWalkableTriangles calling...");
     m_triareas.resize(meshData->indexCount / 3);
     rcMarkWalkableTriangles(m_ctx.get(), settings->walkableSlopeAngle,
                            meshData->vertices, meshData->vertexCount,
                            meshData->indices, meshData->indexCount / 3,
                            m_triareas.data());
-    std::cout << "  rcMarkWalkableTriangles success" << std::endl;
+    UNITY_LOG_INFO("  rcMarkWalkableTriangles success");
     
     // Heightfield에 삼각형 래스터화
-    std::cout << "  rcRasterizeTriangles calling..." << std::endl;
+    UNITY_LOG_INFO("  rcRasterizeTriangles calling...");
     if (!rcRasterizeTriangles(m_ctx.get(), meshData->vertices, meshData->vertexCount,
                              meshData->indices, m_triareas.data(),
                              meshData->indexCount / 3, *m_solid, settings->walkableClimb)) {
-        std::cout << "  ERROR: rcRasterizeTriangles failed" << std::endl;
+        UNITY_LOG_ERROR("  ERROR: rcRasterizeTriangles failed");
         return false;
     }
-    std::cout << "  rcRasterizeTriangles success" << std::endl;
+    UNITY_LOG_INFO("  rcRasterizeTriangles success");
     
-    std::cout << "  BuildHeightfield: completed" << std::endl;
+    UNITY_LOG_INFO("  BuildHeightfield: completed");
     return true;
 }
 
 bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSettings* settings) {
-    std::cout << "  BuildCompactHeightfield: 시작" << std::endl;
+    UNITY_LOG_INFO("  BuildCompactHeightfield: 시작");
     
     m_chf = std::make_unique<rcCompactHeightfield>();
     
-    std::cout << "  rcBuildCompactHeightfield 호출..." << std::endl;
+    UNITY_LOG_INFO("  rcBuildCompactHeightfield 호출...");
     if (!rcBuildCompactHeightfield(m_ctx.get(), settings->walkableHeight, settings->walkableClimb,
                                   *m_solid, *m_chf)) {
-        std::cout << "  ERROR: rcBuildCompactHeightfield 실패" << std::endl;
+        UNITY_LOG_ERROR("  ERROR: rcBuildCompactHeightfield 실패");
         return false;
     }
-    std::cout << "  rcBuildCompactHeightfield 성공" << std::endl;
+    UNITY_LOG_INFO("  rcBuildCompactHeightfield 성공");
     
     // walkableRadius가 0보다 클 때만 erosion 수행
     // if (settings->walkableRadius > 0.0f) {
@@ -383,12 +386,12 @@ bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSetting
     // }
     
     // 대신 간단한 폴리곤을 직접 생성
-    std::cout << "  CreateSimplePolyMesh 호출..." << std::endl;
+    UNITY_LOG_INFO("  CreateSimplePolyMesh 호출...");
     bool result = CreateSimplePolyMesh(settings);
     if (result) {
-        std::cout << "  CreateSimplePolyMesh 성공" << std::endl;
+        UNITY_LOG_INFO("  CreateSimplePolyMesh 성공");
     } else {
-        std::cout << "  ERROR: CreateSimplePolyMesh 실패" << std::endl;
+        UNITY_LOG_ERROR("  ERROR: CreateSimplePolyMesh 실패");
     }
     return result;
 }
@@ -427,34 +430,34 @@ bool UnityNavMeshBuilder::BuildDetailMesh(const UnityNavMeshBuildSettings* setti
 }
 
 bool UnityNavMeshBuilder::BuildDetourNavMesh(const UnityNavMeshBuildSettings* settings) {
-    std::cout << "  BuildDetourNavMesh: start" << std::endl;
+    UNITY_LOG_INFO("  BuildDetourNavMesh: start");
     
     // m_pmesh와 m_dmesh가 없거나 값이 0이면 CreateSimplePolyMesh 호출
     if (!m_pmesh || !m_dmesh || m_pmesh->nverts == 0 || m_pmesh->npolys == 0) {
-        std::cout << "  m_pmesh or m_dmesh is null or empty, calling CreateSimplePolyMesh..." << std::endl;
+        UNITY_LOG_INFO("  m_pmesh or m_dmesh is null or empty, calling CreateSimplePolyMesh...");
         if (!CreateSimplePolyMesh(settings)) {
-            std::cout << "  ERROR: CreateSimplePolyMesh failed" << std::endl;
+            UNITY_LOG_ERROR("BuildNavMesh: CreateSimplePolyMesh failed");
             return false;
         }
         
         // 다시 상태 확인
-        std::cout << "  After CreateSimplePolyMesh:" << std::endl;
-        std::cout << "  m_pmesh status: " << (m_pmesh ? "valid" : "null") << std::endl;
-        std::cout << "  m_dmesh status: " << (m_dmesh ? "valid" : "null") << std::endl;
+        UNITY_LOG_INFO("  After CreateSimplePolyMesh:");
+        UNITY_LOG_INFO("  m_pmesh status: %s", (m_pmesh ? "valid" : "null"));
+        UNITY_LOG_INFO("  m_dmesh status: %s", (m_dmesh ? "valid" : "null"));
         if (m_pmesh) {
-            std::cout << "  m_pmesh->nverts: " << m_pmesh->nverts << std::endl;
-            std::cout << "  m_pmesh->npolys: " << m_pmesh->npolys << std::endl;
+            UNITY_LOG_INFO("  m_pmesh->nverts: %d", m_pmesh->nverts);
+            UNITY_LOG_INFO("  m_pmesh->npolys: %d", m_pmesh->npolys);
         }
     }
     
     // 테스트 목적으로 성공 반환 (NavMesh 생성 우회)
-    std::cout << "  TEST MODE: Skipping NavMesh creation for testing purposes" << std::endl;
-    std::cout << "  BuildDetourNavMesh: completed (test mode)" << std::endl;
+    UNITY_LOG_INFO("  TEST MODE: Skipping NavMesh creation for testing purposes");
+    UNITY_LOG_INFO("  BuildDetourNavMesh: completed (test mode)");
     return true;
 }
 
 bool UnityNavMeshBuilder::CreateSimplePolyMesh(const UnityNavMeshBuildSettings* settings) {
-    std::cout << "  CreateSimplePolyMesh: start" << std::endl;
+    UNITY_LOG_INFO("  CreateSimplePolyMesh: start");
     
     // 복잡한 메시인지 확인 (버텍스 수가 많거나 인덱스 수가 많은 경우)
     bool isComplexMesh = false;
@@ -519,8 +522,8 @@ bool UnityNavMeshBuilder::CreateSimplePolyMesh(const UnityNavMeshBuildSettings* 
             m_dmesh->meshes[i] = 0;
         }
         
-        std::cout << "    CreateSimplePolyMesh: complex mesh - nverts=" << m_pmesh->nverts << ", npolys=" << m_pmesh->npolys << std::endl;
-        std::cout << "    DetailMesh created: nverts=" << m_dmesh->nverts << ", ntris=" << m_dmesh->ntris << std::endl;
+        UNITY_LOG_INFO("    CreateSimplePolyMesh: complex mesh - nverts=%d, npolys=%d", m_pmesh->nverts, m_pmesh->npolys);
+        UNITY_LOG_INFO("    DetailMesh created: nverts=%d, ntris=%d", m_dmesh->nverts, m_dmesh->ntris);
     } else {
         // 기존의 간단한 폴리메시 생성
         m_pmesh = std::make_unique<rcPolyMesh>();
@@ -578,12 +581,12 @@ bool UnityNavMeshBuilder::CreateSimplePolyMesh(const UnityNavMeshBuildSettings* 
             m_dmesh->meshes[i] = 0;
         }
         
-        std::cout << "    PolyMesh vertices created: nverts=" << m_pmesh->nverts << std::endl;
-        std::cout << "    PolyMesh created: npolys=" << m_pmesh->npolys << std::endl;
-        std::cout << "    DetailMesh created: nverts=" << m_dmesh->nverts << ", ntris=" << m_dmesh->ntris << std::endl;
+        UNITY_LOG_INFO("    PolyMesh vertices created: nverts=%d", m_pmesh->nverts);
+        UNITY_LOG_INFO("    PolyMesh created: npolys=%d", m_pmesh->npolys);
+        UNITY_LOG_INFO("    DetailMesh created: nverts=%d, ntris=%d", m_dmesh->nverts, m_dmesh->ntris);
     }
     
-    std::cout << "  CreateSimplePolyMesh: completed" << std::endl;
+    UNITY_LOG_INFO("  CreateSimplePolyMesh: completed");
     
     return true;
 }

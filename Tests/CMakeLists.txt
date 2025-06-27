@@ -24,3 +24,6 @@ else()
 endif()
 
 add_test(Tests Tests)
+
+# UnityWrapper 테스트 추가
+add_subdirectory(UnityWrapper)

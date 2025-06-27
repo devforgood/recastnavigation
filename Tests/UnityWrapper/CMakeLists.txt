@@ -16,7 +16,7 @@ add_executable(UnityWrapperTests
 
 # 헤더 파일 경로 설정
 target_include_directories(UnityWrapperTests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../Include
+    ${CMAKE_SOURCE_DIR}/UnityWrapper/Include
     ${CMAKE_SOURCE_DIR}/Recast/Include
     ${CMAKE_SOURCE_DIR}/Detour/Include
     ${CMAKE_SOURCE_DIR}/DetourCrowd/Include
@@ -27,7 +27,7 @@ target_include_directories(UnityWrapperTests PRIVATE
 
 # 라이브러리 링크 (직접 링크)
 target_link_libraries(UnityWrapperTests
-    RecastNavigationUnity
+    UnityWrapper
     Recast
     Detour
     DetourCrowd
@@ -60,8 +60,8 @@ set_target_properties(UnityWrapperTests PROPERTIES
 if(WIN32)
     add_custom_command(TARGET UnityWrapperTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_BINARY_DIR}/UnityPlugins/Windows/x64/Debug/RecastNavigationUnity.dll"
-        "${CMAKE_BINARY_DIR}/Tests/Debug/RecastNavigationUnity.dll"
-        COMMENT "Copying RecastNavigationUnity.dll to test output directory"
+        "${CMAKE_BINARY_DIR}/UnityPlugins/Windows/x64/Debug/UnityWrapper.dll"
+        "${CMAKE_BINARY_DIR}/Tests/Debug/UnityWrapper.dll"
+        COMMENT "Copying UnityWrapper.dll to test output directory"
     )
 endif() 

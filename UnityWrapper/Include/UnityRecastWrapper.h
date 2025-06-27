@@ -115,4 +115,11 @@ extern "C" {
     UNITY_API void UnityRecast_SetDebugDraw(bool enabled);
     UNITY_API void UnityRecast_GetDebugVertices(float* vertices, int* vertexCount);
     UNITY_API void UnityRecast_GetDebugIndices(int* indices, int* indexCount);
+    
+    // 로깅 시스템 함수들
+    UNITY_API bool UnityRecast_InitializeLogging(const char* logFilePath, int logLevel, int output);
+    UNITY_API void UnityRecast_SetLogLevel(int level);
+    UNITY_API void UnityRecast_SetLogOutput(int output);
+    UNITY_API void UnityRecast_SetLogFilePath(const char* filePath);
+    UNITY_API void UnityRecast_ShutdownLogging();
 } 

@@ -1,6 +1,7 @@
 #include "UnityRecastWrapper.h"
 #include "UnityNavMeshBuilder.h"
 #include "UnityPathfinding.h"
+#include "UnityLog.h"
 #include <memory>
 #include <cstring>
 #include <cmath>
@@ -14,6 +15,7 @@ static UnityYAxisRotation g_yAxisRotation = UNITY_Y_ROTATION_NONE;
 
 // 좌표 변환 함수들
 static void TransformVertex(float* x, float* y, float* z) {
+    (void)y; // 미사용 매개변수 경고 방지
     // Y축 회전 적용
     float originalX = *x;
     float originalZ = *z;
@@ -46,6 +48,7 @@ static void TransformVertex(float* x, float* y, float* z) {
 }
 
 static void TransformPathPoint(float* x, float* y, float* z) {
+    (void)y; // 미사용 매개변수 경고 방지
     // 좌표계 변환 적용 (역변환)
     if (g_coordinateSystem == UNITY_COORD_LEFT_HANDED) {
         // RecastNavigation (오른손 좌표계) -> Unity (왼손 좌표계)
@@ -85,20 +88,38 @@ UNITY_API bool UnityRecast_Initialize() {
     }
     
     try {
+        // 로깅 시스템 초기화
+        UnityLog_Initialize("UnityWrapper.log", 0, 3); // DEBUG 레벨, BOTH 출력
+        UNITY_LOG_INFO("UnityRecast_Initialize: Starting initialization");
+        
         g_navMeshBuilder = std::make_unique<UnityNavMeshBuilder>();
         g_pathfinding = std::make_unique<UnityPathfinding>();
         g_initialized = true;
+        
+        UNITY_LOG_INFO("UnityRecast_Initialize: Initialization completed successfully");
         return true;
     }
+    catch (const std::exception& e) {
+        UNITY_LOG_ERROR("UnityRecast_Initialize: Initialization failed - %s", e.what());
+        return false;
+    }
     catch (...) {
+        UNITY_LOG_ERROR("UnityRecast_Initialize: Initialization failed - Unknown error");
         return false;
     }
 }
 
 UNITY_API void UnityRecast_Cleanup() {
+    UNITY_LOG_INFO("UnityRecast_Cleanup: Starting cleanup");
+    
     g_pathfinding.reset();
     g_navMeshBuilder.reset();
     g_initialized = false;
+    
+    // 로깅 시스템 정리
+    UnityLog_Shutdown();
+    
+    UNITY_LOG_INFO("UnityRecast_Cleanup: Cleanup completed");
 }
 
 UNITY_API void UnityRecast_SetCoordinateSystem(UnityCoordinateSystem system) {
@@ -314,10 +335,13 @@ UNITY_API int UnityRecast_GetVertexCount() {
 
 // 디버그 기능들 (향후 구현)
 UNITY_API void UnityRecast_SetDebugDraw(bool enabled) {
+    (void)enabled; // 미사용 매개변수 경고 방지
     // TODO: 디버그 드로잉 기능 구현
 }
 
 UNITY_API void UnityRecast_GetDebugVertices(float* vertices, int* vertexCount) {
+    (void)vertices; // 미사용 매개변수 경고 방지
+    (void)vertexCount; // 미사용 매개변수 경고 방지
     // TODO: 디버그 정점 정보 반환
     if (vertexCount) {
         *vertexCount = 0;
@@ -325,10 +349,33 @@ UNITY_API void UnityRecast_GetDebugVertices(float* vertices, int* vertexCount) {
 }
 
 UNITY_API void UnityRecast_GetDebugIndices(int* indices, int* indexCount) {
+    (void)indices; // 미사용 매개변수 경고 방지
+    (void)indexCount; // 미사용 매개변수 경고 방지
     // TODO: 디버그 인덱스 정보 반환
     if (indexCount) {
         *indexCount = 0;
     }
+}
+
+// 로깅 시스템 함수들
+UNITY_API bool UnityRecast_InitializeLogging(const char* logFilePath, int logLevel, int output) {
+    return UnityLog_Initialize(logFilePath, logLevel, output);
+}
+
+UNITY_API void UnityRecast_SetLogLevel(int level) {
+    UnityLog_SetLevel(level);
+}
+
+UNITY_API void UnityRecast_SetLogOutput(int output) {
+    UnityLog_SetOutput(output);
+}
+
+UNITY_API void UnityRecast_SetLogFilePath(const char* filePath) {
+    UnityLog_SetFilePath(filePath);
+}
+
+UNITY_API void UnityRecast_ShutdownLogging() {
+    UnityLog_Shutdown();
 }
 
 } // extern "C" 
