@@ -191,6 +191,13 @@ namespace RecastNavigation.Editor
                     BuildNavMeshFromSelection();
                 }
                 
+                GUI.backgroundColor = Color.cyan;
+                if (GUILayout.Button("🔧 권장 설정으로 빌드 (문제 해결)", GUILayout.Height(30)))
+                {
+                    BuildNavMeshFromSelectionWithRecommendedSettings();
+                }
+                GUI.backgroundColor = Color.white;
+                
                 if (GUILayout.Button("선택된 오브젝트 정보"))
                 {
                     ShowSelectionInfo();
@@ -681,7 +688,24 @@ namespace RecastNavigation.Editor
 
                 // 4. NavMesh 빌드
                 Debug.Log("4. NavMesh 빌드 시작...");
-                bool success = navComponent.BuildNavMesh(allVertices.ToArray(), allIndices.ToArray());
+                
+                Vector3[] vertexArray = allVertices.ToArray();
+                int[] indexArray = allIndices.ToArray();
+                
+                // 먼저 일반 빌드 시도
+                bool success = navComponent.BuildNavMesh(vertexArray, indexArray);
+                
+                // 실패시 권장 설정으로 재시도
+                if (!success)
+                {
+                    Debug.LogWarning("일반 설정으로 빌드 실패. 권장 설정으로 재시도합니다...");
+                    success = navComponent.BuildNavMeshWithRecommendedSettings(vertexArray, indexArray);
+                    
+                    if (success)
+                    {
+                        Debug.Log("✓ 권장 설정으로 NavMesh 빌드 성공!");
+                    }
+                }
                 
                 EditorUtility.ClearProgressBar();
                 
@@ -711,6 +735,128 @@ namespace RecastNavigation.Editor
                 Debug.LogError($"NavMesh 빌드 중 오류: {e.Message}");
                 Debug.LogError($"스택 트레이스: {e.StackTrace}");
             }
+        }
+        
+        void BuildNavMeshFromSelectionWithRecommendedSettings()
+        {
+            Debug.Log("=== 권장 설정으로 NavMesh 빌드 시작 ===");
+            
+            // 0. RecastNavigation 초기화 확인
+            if (!isInitialized)
+            {
+                Debug.Log("RecastNavigation이 초기화되지 않았습니다. 자동 초기화를 시도합니다.");
+                InitializeRecastNavigation();
+                
+                if (!isInitialized)
+                {
+                    EditorUtility.DisplayDialog("초기화 실패", "RecastNavigation 초기화에 실패했습니다.\nSetup Guide를 사용하여 DLL을 먼저 설치해주세요.", "확인");
+                    Debug.LogError("RecastNavigation 자동 초기화 실패!");
+                    return;
+                }
+            }
+            
+            // 1. 선택된 오브젝트 확인
+            if (selectedObjects.Count == 0)
+            {
+                EditorUtility.DisplayDialog("오류", "처리할 메시 오브젝트가 선택되지 않았습니다.\n\nMeshFilter 또는 MeshRenderer 컴포넌트가 있는 오브젝트를 선택해주세요.", "확인");
+                return;
+            }
+
+            // 2. RecastNavigationComponent 확인/생성
+            RecastNavigationComponent navComponent = FindObjectOfType<RecastNavigationComponent>();
+            if (navComponent == null)
+            {
+                navComponent = CreateRecastNavigationComponent();
+                if (navComponent == null)
+                {
+                    EditorUtility.DisplayDialog("오류", "RecastNavigationComponent 생성에 실패했습니다.", "확인");
+                    return;
+                }
+            }
+
+            try
+            {
+                EditorUtility.DisplayProgressBar("권장 설정 NavMesh 빌드", "메시 데이터 수집 중...", 0f);
+                
+                // 3. 메시 데이터 수집
+                List<Vector3> allVertices = new List<Vector3>();
+                List<int> allIndices = new List<int>();
+
+                for (int i = 0; i < selectedObjects.Count; i++)
+                {
+                    EditorUtility.DisplayProgressBar("권장 설정 NavMesh 빌드", $"오브젝트 처리 중... ({i + 1}/{selectedObjects.Count})", (float)i / selectedObjects.Count);
+                    
+                    GameObject obj = selectedObjects[i];
+                    MeshFilter meshFilter = obj.GetComponent<MeshFilter>();
+                    
+                    if (meshFilter != null && meshFilter.sharedMesh != null)
+                    {
+                        Mesh mesh = meshFilter.sharedMesh;
+                        Vector3[] vertices = mesh.vertices;
+                        int[] indices = mesh.triangles;
+
+                        // 월드 좌표로 변환
+                        Transform transform = obj.transform;
+                        for (int j = 0; j < vertices.Length; j++)
+                        {
+                            vertices[j] = transform.TransformPoint(vertices[j]);
+                        }
+
+                        // 인덱스 조정
+                        int vertexOffset = allVertices.Count;
+                        for (int j = 0; j < indices.Length; j++)
+                        {
+                            indices[j] += vertexOffset;
+                        }
+
+                        allVertices.AddRange(vertices);
+                        allIndices.AddRange(indices);
+                    }
+                }
+
+                if (allVertices.Count == 0 || allIndices.Count == 0)
+                {
+                    EditorUtility.ClearProgressBar();
+                    EditorUtility.DisplayDialog("오류", "유효한 메시 데이터가 없습니다.\n\n선택된 오브젝트에 유효한 Mesh가 있는지 확인해주세요.", "확인");
+                    return;
+                }
+
+                // 4. 권장 설정으로 NavMesh 빌드
+                EditorUtility.DisplayProgressBar("권장 설정 NavMesh 빌드", "권장 설정으로 NavMesh 빌드 중...", 0.8f);
+                
+                Vector3[] vertexArray = allVertices.ToArray();
+                int[] indexArray = allIndices.ToArray();
+                
+                bool success = navComponent.BuildNavMeshWithRecommendedSettings(vertexArray, indexArray);
+                
+                EditorUtility.ClearProgressBar();
+                
+                if (success)
+                {
+                    isNavMeshLoaded = true;
+                    statusMessage = "권장 설정으로 NavMesh 빌드 성공";
+                    
+                    EditorUtility.DisplayDialog("성공", "권장 설정으로 NavMesh 빌드가 완료되었습니다!\n\n설정이 자동으로 최적화되었습니다.", "확인");
+                    Debug.Log("✓ 권장 설정으로 NavMesh 빌드 완료!");
+                }
+                else
+                {
+                    statusMessage = "권장 설정으로도 NavMesh 빌드 실패";
+                    
+                    EditorUtility.DisplayDialog("오류", "권장 설정으로도 NavMesh 빌드에 실패했습니다.\n\n메시가 너무 작거나 복잡할 수 있습니다.\nConsole 로그를 확인해주세요.", "확인");
+                    Debug.LogError("권장 설정으로도 NavMesh 빌드 실패!");
+                }
+            }
+            catch (System.Exception e)
+            {
+                EditorUtility.ClearProgressBar();
+                statusMessage = $"권장 설정 빌드 중 오류: {e.Message}";
+                
+                EditorUtility.DisplayDialog("오류", $"권장 설정 빌드 중 오류가 발생했습니다:\n\n{e.Message}", "확인");
+                Debug.LogError($"권장 설정 빌드 중 오류: {e.Message}");
+            }
+            
+            Debug.Log("=== 권장 설정으로 NavMesh 빌드 완료 ===");
         }
         
         void ShowSelectionInfo()

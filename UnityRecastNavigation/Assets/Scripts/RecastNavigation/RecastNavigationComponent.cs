@@ -398,6 +398,72 @@ namespace RecastNavigation
                 return false;
             }
 
+            // 상세한 메시 분석 로깅
+            Debug.Log("=== NavMesh 빌드 상세 정보 ===");
+            Debug.Log($"입력 메시: {vertices.Length} 정점, {indices.Length/3} 삼각형");
+            
+            // 메시 바운딩 박스 계산
+            Vector3 minBounds = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            Vector3 maxBounds = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+            
+            foreach (Vector3 vertex in vertices)
+            {
+                if (vertex.x < minBounds.x) minBounds.x = vertex.x;
+                if (vertex.y < minBounds.y) minBounds.y = vertex.y;
+                if (vertex.z < minBounds.z) minBounds.z = vertex.z;
+                if (vertex.x > maxBounds.x) maxBounds.x = vertex.x;
+                if (vertex.y > maxBounds.y) maxBounds.y = vertex.y;
+                if (vertex.z > maxBounds.z) maxBounds.z = vertex.z;
+            }
+            
+            Vector3 meshSize = maxBounds - minBounds;
+            Debug.Log($"메시 바운딩 박스: Min{minBounds}, Max{maxBounds}");
+            Debug.Log($"메시 크기: {meshSize} (가로={meshSize.x:F2}, 세로={meshSize.y:F2}, 높이={meshSize.z:F2})");
+            
+            // 현재 빌드 설정 로깅
+            Debug.Log("=== NavMesh 빌드 설정 ===");
+            Debug.Log($"cellSize: {buildSettings.cellSize:F3} (메시 너비의 {(buildSettings.cellSize / System.Math.Max(meshSize.x, 0.001f) * 100):F1}%)");
+            Debug.Log($"cellHeight: {buildSettings.cellHeight:F3}");
+            Debug.Log($"walkableHeight: {buildSettings.walkableHeight:F3}");
+            Debug.Log($"walkableRadius: {buildSettings.walkableRadius:F3}");
+            Debug.Log($"walkableClimb: {buildSettings.walkableClimb:F3}");
+            Debug.Log($"minRegionArea: {buildSettings.minRegionArea:F1}");
+            Debug.Log($"mergeRegionArea: {buildSettings.mergeRegionArea:F1}");
+            Debug.Log($"autoTransformCoordinates: {autoTransformCoordinates}");
+            
+            // 설정 적합성 검사 및 권장사항
+            bool hasWarnings = false;
+            if (buildSettings.cellSize > meshSize.x * 0.5f && meshSize.x > 0)
+            {
+                Debug.LogWarning($"⚠️ cellSize({buildSettings.cellSize:F3})가 메시 너비({meshSize.x:F2})에 비해 너무 큽니다!");
+                Debug.LogWarning($"권장 cellSize: {meshSize.x * 0.1f:F3} ~ {meshSize.x * 0.2f:F3}");
+                hasWarnings = true;
+            }
+            if (buildSettings.cellSize > meshSize.z * 0.5f && meshSize.z > 0)
+            {
+                Debug.LogWarning($"⚠️ cellSize({buildSettings.cellSize:F3})가 메시 깊이({meshSize.z:F2})에 비해 너무 큽니다!");
+                Debug.LogWarning($"권장 cellSize: {meshSize.z * 0.1f:F3} ~ {meshSize.z * 0.2f:F3}");
+                hasWarnings = true;
+            }
+            if (buildSettings.minRegionArea > 50)
+            {
+                Debug.LogWarning($"⚠️ minRegionArea({buildSettings.minRegionArea:F1})가 너무 클 수 있습니다!");
+                Debug.LogWarning("권장 minRegionArea: 8 ~ 20");
+                hasWarnings = true;
+            }
+            
+            if (hasWarnings)
+            {
+                Debug.LogWarning("설정 문제가 감지되었습니다. NavMesh 생성이 실패할 수 있습니다.");
+                
+                // 자동 권장 설정 제안
+                Debug.Log("=== 권장 설정값 ===");
+                float recommendedCellSize = System.Math.Max(meshSize.x, meshSize.z) * 0.15f;
+                Debug.Log($"권장 cellSize: {recommendedCellSize:F3}");
+                Debug.Log($"권장 minRegionArea: 8");
+                Debug.Log($"권장 mergeRegionArea: 20");
+            }
+
             try
             {
                 // 메시 데이터 준비
@@ -720,6 +786,99 @@ namespace RecastNavigation
         public byte[] GetNavMeshData()
         {
             return navMeshData;
+        }
+        
+        /// <summary>
+        /// 메시 크기에 맞는 권장 설정 생성
+        /// </summary>
+        public NavMeshBuildSettings GetRecommendedSettings(Vector3[] vertices)
+        {
+            if (vertices == null || vertices.Length == 0)
+                return buildSettings;
+                
+            // 메시 바운딩 박스 계산
+            Vector3 minBounds = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            Vector3 maxBounds = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+            
+            foreach (Vector3 vertex in vertices)
+            {
+                if (vertex.x < minBounds.x) minBounds.x = vertex.x;
+                if (vertex.y < minBounds.y) minBounds.y = vertex.y;
+                if (vertex.z < minBounds.z) minBounds.z = vertex.z;
+                if (vertex.x > maxBounds.x) maxBounds.x = vertex.x;
+                if (vertex.y > maxBounds.y) maxBounds.y = vertex.y;
+                if (vertex.z > maxBounds.z) maxBounds.z = vertex.z;
+            }
+            
+            Vector3 meshSize = maxBounds - minBounds;
+            float maxDimension = System.Math.Max(meshSize.x, meshSize.z);
+            
+            // 권장 설정 생성
+            var recommendedSettings = new NavMeshBuildSettings
+            {
+                cellSize = maxDimension * 0.15f,  // 메시 크기의 15%
+                cellHeight = 0.2f,
+                walkableSlopeAngle = 45.0f,
+                walkableHeight = 2.0f,
+                walkableRadius = 0.6f,
+                walkableClimb = 0.9f,
+                minRegionArea = 8.0f,
+                mergeRegionArea = 20.0f,
+                maxVertsPerPoly = 6,
+                detailSampleDist = 6.0f,
+                detailSampleMaxError = 1.0f,
+                autoTransformCoordinates = true
+            };
+            
+            // 작은 메시의 경우 더 세밀한 설정
+            if (maxDimension < 10.0f)
+            {
+                recommendedSettings.cellSize = System.Math.Max(maxDimension * 0.1f, 0.05f);
+                recommendedSettings.minRegionArea = 4.0f;
+                recommendedSettings.mergeRegionArea = 10.0f;
+            }
+            // 큰 메시의 경우 최적화된 설정
+            else if (maxDimension > 100.0f)
+            {
+                recommendedSettings.cellSize = maxDimension * 0.2f;
+                recommendedSettings.minRegionArea = 16.0f;
+                recommendedSettings.mergeRegionArea = 40.0f;
+            }
+            
+            return recommendedSettings;
+        }
+        
+        /// <summary>
+        /// 권장 설정을 자동으로 적용하고 NavMesh 빌드
+        /// </summary>
+        public bool BuildNavMeshWithRecommendedSettings(Vector3[] vertices, int[] indices)
+        {
+            Debug.Log("=== 권장 설정으로 NavMesh 빌드 시도 ===");
+            
+            var originalSettings = buildSettings;
+            var recommendedSettings = GetRecommendedSettings(vertices);
+            
+            Debug.Log("권장 설정 적용:");
+            Debug.Log($"  cellSize: {originalSettings.cellSize:F3} → {recommendedSettings.cellSize:F3}");
+            Debug.Log($"  minRegionArea: {originalSettings.minRegionArea:F1} → {recommendedSettings.minRegionArea:F1}");
+            Debug.Log($"  mergeRegionArea: {originalSettings.mergeRegionArea:F1} → {recommendedSettings.mergeRegionArea:F1}");
+            
+            // 임시로 권장 설정 적용
+            buildSettings = recommendedSettings;
+            
+            bool success = BuildNavMesh(vertices, indices);
+            
+            if (!success)
+            {
+                Debug.LogWarning("권장 설정으로도 빌드 실패. 원래 설정 복원.");
+                buildSettings = originalSettings;
+            }
+            else
+            {
+                Debug.Log("✓ 권장 설정으로 NavMesh 빌드 성공!");
+            }
+            
+            return success;
         }
 
         #endregion

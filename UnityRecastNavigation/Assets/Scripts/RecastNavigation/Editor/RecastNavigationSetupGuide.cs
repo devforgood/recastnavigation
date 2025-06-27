@@ -3,6 +3,7 @@ using UnityEditor;
 using RecastNavigation;
 using System.IO;
 using System.Security.Cryptography;
+using System.Linq;
 
 namespace RecastNavigation.Editor
 {
@@ -400,190 +401,256 @@ namespace RecastNavigation.Editor
         
         void CopyDllToPlugins()
         {
+            Debug.Log("[RecastNavigation] ===========================================");
+            Debug.Log("[RecastNavigation] DLL Copy Process Started");
+            Debug.Log("[RecastNavigation] ===========================================");
+            
             if (string.IsNullOrEmpty(dllPath))
             {
+                Debug.LogError("[RecastNavigation] DLL path is not set");
                 EditorUtility.DisplayDialog("오류", "DLL 경로를 선택해주세요.", "확인");
                 return;
             }
             
+            Debug.Log($"[RecastNavigation] Source DLL path: {dllPath}");
+            
             if (!File.Exists(dllPath))
             {
+                Debug.LogError($"[RecastNavigation] Source DLL file does not exist: {dllPath}");
                 EditorUtility.DisplayDialog("오류", "선택한 DLL 파일이 존재하지 않습니다.", "확인");
                 return;
             }
             
-            // Plugins 폴더 생성
-            string pluginsPath = "Assets/Plugins/";
-            if (!Directory.Exists(pluginsPath))
-            {
-                Directory.CreateDirectory(pluginsPath);
-            }
-            
-            // DLL 복사
-            string fileName = Path.GetFileName(dllPath);
-            string destPath = Path.Combine(pluginsPath, fileName);
-            
+            // Log source file information
             try
             {
-                // 먼저 두 파일을 MD5로 비교
-                bool filesAreIdentical = false;
-                try
-                {
-                    string sourceMD5 = GetFileMD5Hash(dllPath);
-                    
-                    // 대상 파일이 존재하는 경우에만 비교
-                    if (File.Exists(destPath))
-                    {
-                        string destMD5 = GetFileMD5Hash(destPath);
-                        
-                        if (sourceMD5 == destMD5)
-                        {
-                            filesAreIdentical = true;
-                            Debug.Log($"두 파일이 동일합니다. MD5: {sourceMD5}");
-                        }
-                        else
-                        {
-                            Debug.Log($"파일이 다릅니다. 소스 MD5: {sourceMD5}, 대상 MD5: {destMD5}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.Log($"대상 파일이 없습니다. 소스 MD5: {sourceMD5}");
-                    }
-                }
-                catch (System.UnauthorizedAccessException ex)
-                {
-                    Debug.LogWarning($"파일 접근 권한이 없어서 MD5 비교를 건너뜁니다: {ex.Message}");
-                }
-                catch (System.IO.IOException ex)
-                {
-                    Debug.LogWarning($"파일이 사용 중이어서 MD5 비교를 건너뜁니다: {ex.Message}");
-                    
-                    // 파일을 사용하고 있는 프로세스 확인
-                    string processInfo = GetProcessesUsingFile(destPath);
-                    string dialogMessage = "DLL 파일이 다른 프로세스에서 사용 중입니다.\n" +
-                                         "MD5 비교를 할 수 없어서 파일이 동일한지 확인할 수 없습니다.\n\n";
-                    
-                    if (!string.IsNullOrEmpty(processInfo))
-                    {
-                        dialogMessage += $"사용 중인 프로세스:\n{processInfo}\n\n";
-                    }
-                    
-                    dialogMessage += "해결 방법을 선택하세요:";
-                    
-                    // 3가지 옵션 제공
-                    int choice = EditorUtility.DisplayDialogComplex(
-                        "파일 사용 중", 
-                        dialogMessage,
-                        "강제 덮어쓰기", 
-                        "취소",
-                        "다른 이름으로 복사"
-                    );
-                    
-                    if (choice == 1) // 취소
-                    {
-                        Debug.Log("사용자가 DLL 복사를 취소했습니다.");
-                        return;
-                    }
-                    else if (choice == 2) // 다른 이름으로 복사
-                    {
-                        if (CopyWithAlternateName(dllPath, destPath))
-                        {
-                            return; // 성공적으로 복사됨
-                        }
-                        // 실패시 강제 덮어쓰기로 진행
-                    }
-                    // choice == 0이면 강제 덮어쓰기로 진행
-                }
-                catch (System.Exception ex)
-                {
-                    Debug.LogWarning($"MD5 비교 중 예상치 못한 오류: {ex.Message}");
-                }
+                var fileInfo = new FileInfo(dllPath);
+                Debug.Log($"[RecastNavigation] Source file size: {fileInfo.Length} bytes");
+                Debug.Log($"[RecastNavigation] Source file last write time: {fileInfo.LastWriteTime}");
+                Debug.Log($"[RecastNavigation] Source file creation time: {fileInfo.CreationTime}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[RecastNavigation] Failed to get source file info: {ex.Message}");
+            }
+            
+            // Create Plugins folder
+            string pluginsPath = "Assets/Plugins/";
+            Debug.Log($"[RecastNavigation] Target plugins folder: {pluginsPath}");
+            
+            if (!Directory.Exists(pluginsPath))
+            {
+                Debug.Log("[RecastNavigation] Plugins folder does not exist. Creating...");
+                Directory.CreateDirectory(pluginsPath);
+                Debug.Log("[RecastNavigation] Plugins folder created successfully");
+            }
+            else
+            {
+                Debug.Log("[RecastNavigation] Plugins folder already exists");
+            }
+            
+            // DLL copy
+            string fileName = Path.GetFileName(dllPath);
+            string destPath = Path.Combine(pluginsPath, fileName);
+            Debug.Log($"[RecastNavigation] Target DLL path: {destPath}");
+            
+                          try
+              {
+                 // Step 1: Try to copy directly without any comparison (fastest approach)
+                 Debug.Log("[RecastNavigation] Attempting direct file copy without comparison...");
+                Debug.Log($"[RecastNavigation] File.Copy({dllPath}, {destPath}, true)");
                 
-                // 파일이 동일하면 복사 스킵
-                if (filesAreIdentical)
-                {
-                    dllCopied = true;
-                    completedSteps[0] = true;
-                    SaveSettings(); // 설정 자동 저장
-                    
-                    EditorUtility.DisplayDialog("성공", "DLL 파일이 이미 최신 상태입니다. 복사를 건너뜁니다.", "확인");
-                    Debug.Log("DLL 파일이 이미 최신 상태입니다. 복사를 건너뜁니다.");
-                    return;
-                }
-                
-                // 파일이 다르거나 비교할 수 없는 경우 복사 진행
                 File.Copy(dllPath, destPath, true);
+                Debug.Log("[RecastNavigation] File copy completed. Refreshing AssetDatabase...");
+                
                 AssetDatabase.Refresh();
+                Debug.Log("[RecastNavigation] AssetDatabase refresh completed");
                 
                 dllCopied = true;
                 completedSteps[0] = true;
                 SaveSettings(); // 설정 자동 저장
+                Debug.Log("[RecastNavigation] Settings saved");
                 
                 EditorUtility.DisplayDialog("성공", "DLL이 성공적으로 복사되었습니다.", "확인");
-                Debug.Log($"DLL 복사 완료: {destPath}");
+                Debug.Log($"[RecastNavigation] ✓ DLL copy successful: {destPath}");
+                Debug.Log("[RecastNavigation] ===========================================");
             }
             catch (System.UnauthorizedAccessException e)
             {
+                Debug.LogError($"[RecastNavigation] ✗ DLL copy permission error: {e.Message}");
+                Debug.LogError($"[RecastNavigation] Stack trace:\n{e.StackTrace}");
+                Debug.LogError("[RecastNavigation] ===========================================");
+                
                 EditorUtility.DisplayDialog("권한 오류", $"DLL 복사 권한이 없습니다: {e.Message}\n\nUnity Editor를 관리자 권한으로 실행해보세요.", "확인");
-                Debug.LogError($"DLL 복사 권한 오류: {e.Message}");
             }
             catch (System.IO.IOException e)
             {
+                Debug.LogError($"[RecastNavigation] ✗ DLL copy I/O error: {e.Message}");
+                Debug.LogError($"[RecastNavigation] Error type: {e.GetType().Name}");
+                Debug.LogError($"[RecastNavigation] Stack trace:\n{e.StackTrace}");
+                
                 if (e.Message.Contains("being used by another process"))
                 {
-                    // Unity가 DLL을 사용 중인 경우 특별 처리
-                    int choice = EditorUtility.DisplayDialogComplex(
-                        "DLL 사용 중", 
-                        "Unity가 DLL을 이미 로드해서 사용하고 있습니다.\n" +
-                        "DLL을 교체하려면 Unity Domain을 다시 로드해야 합니다.\n\n" +
-                        "해결 방법을 선택하세요:",
-                        "Domain Reload 후 복사", 
-                        "취소",
-                        "Unity Editor 재시작 안내"
-                    );
+                    Debug.LogWarning("[RecastNavigation] DLL is being used by another process");
                     
-                    if (choice == 0) // Domain Reload 후 복사
+                    // Step 2: Check if files are actually different using MD5
+                    bool filesAreDifferent = false;
+                    string comparisonResult = "";
+                    
+                    Debug.Log("[RecastNavigation] Checking if files are actually different using MD5...");
+                    try
                     {
-                        Debug.Log("Domain Reload를 수행한 후 DLL 복사를 재시도합니다.");
-                        ScheduleDllCopyAfterDomainReload();
-                        return;
+                        if (File.Exists(destPath))
+                        {
+                            string sourceMD5 = GetFileMD5Hash(dllPath);
+                            string destMD5 = GetFileMD5Hash(destPath);
+                            
+                            filesAreDifferent = (sourceMD5 != destMD5);
+                            comparisonResult = $"Source MD5: {sourceMD5}\nTarget MD5: {destMD5}";
+                            
+                            Debug.Log($"[RecastNavigation] MD5 Comparison Result: {(filesAreDifferent ? "Different" : "Identical")}");
+                            Debug.Log($"[RecastNavigation] {comparisonResult}");
+                        }
+                        else
+                        {
+                            filesAreDifferent = true;
+                            comparisonResult = "Target file does not exist";
+                            Debug.Log("[RecastNavigation] Target file does not exist - update needed");
+                        }
                     }
-                    else if (choice == 2) // Unity Editor 재시작 안내
+                    catch (System.Exception ex)
                     {
-                        EditorUtility.DisplayDialog("Unity Editor 재시작", 
-                            "Unity Editor를 완전히 종료한 후 다시 시작해주세요.\n\n" +
-                            "재시작 후:\n" +
-                            "1. Tools > RecastNavigation > Setup Guide 열기\n" +
-                            "2. DLL 복사 재시도\n\n" +
-                            "이 방법이 가장 확실합니다.", 
+                        Debug.LogWarning($"[RecastNavigation] Could not compare files using MD5: {ex.Message}");
+                        filesAreDifferent = true; // Assume different if cannot compare
+                        comparisonResult = $"MD5 comparison failed: {ex.Message}";
+                    }
+                    
+                    if (filesAreDifferent)
+                    {
+                        Debug.Log("[RecastNavigation] Files are different - Unity restart required");
+                        
+                        // Files are different, Unity restart is necessary
+                        int choice = EditorUtility.DisplayDialogComplex(
+                            "DLL 업데이트 필요", 
+                            "새로운 버전의 DLL이 있지만 Unity가 현재 DLL을 사용 중입니다.\n" +
+                            "업데이트하려면 DLL 언로드가 필요합니다.\n\n" +
+                            $"파일 비교 결과:\n{comparisonResult}\n\n" +
+                            "해결 방법을 선택하세요:",
+                            "강력한 DLL 언로드 시도", 
+                            "취소",
+                            "Unity Editor 재시작 안내"
+                        );
+                        
+                        Debug.Log($"[RecastNavigation] User choice: {choice} (0=DomainReload, 1=Cancel, 2=RestartGuide)");
+                        
+                        if (choice == 0) // 강력한 DLL 언로드 시도
+                        {
+                            Debug.Log("[RecastNavigation] Will attempt powerful DLL unload strategies");
+                            AttemptPowerfulDllUnload();
+                            return;
+                        }
+                        else if (choice == 2) // Unity Editor 재시작 안내
+                        {
+                            Debug.Log("[RecastNavigation] Providing Unity Editor restart guide");
+                            EditorUtility.DisplayDialog("Unity Editor 재시작", 
+                                "Unity Editor를 완전히 종료한 후 다시 시작해주세요.\n\n" +
+                                "재시작 후:\n" +
+                                "1. Tools > RecastNavigation > Setup Guide 열기\n" +
+                                "2. DLL 복사 재시도\n\n" +
+                                "이 방법이 가장 확실합니다.", 
+                                "확인");
+                            return;
+                        }
+                        else // 취소
+                        {
+                            Debug.Log("[RecastNavigation] User cancelled DLL copy operation");
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        Debug.Log("[RecastNavigation] Files are identical - no update needed");
+                        
+                        // Files are identical, no need to restart Unity
+                        dllCopied = true;
+                        completedSteps[0] = true;
+                        SaveSettings();
+                        
+                        EditorUtility.DisplayDialog("정보", 
+                            "DLL 파일이 이미 최신 버전입니다.\n" +
+                            "Unity 재시작이 필요하지 않습니다.\n\n" +
+                            $"파일 비교 결과:\n{comparisonResult}", 
                             "확인");
-                        return;
-                    }
-                    else // 취소
-                    {
-                        Debug.Log("사용자가 DLL 복사를 취소했습니다.");
+                        
+                        Debug.Log("[RecastNavigation] ✓ DLL is already up to date, marked as completed");
+                        Debug.Log("[RecastNavigation] ===========================================");
                         return;
                     }
                 }
                 else
                 {
+                    Debug.LogError("[RecastNavigation] General I/O error occurred");
                     EditorUtility.DisplayDialog("파일 I/O 오류", $"DLL 복사 중 I/O 오류: {e.Message}", "확인");
-                    Debug.LogError($"DLL 복사 I/O 오류: {e.Message}");
                 }
+                
+                Debug.LogError("[RecastNavigation] ===========================================");
             }
             catch (System.Exception e)
             {
+                Debug.LogError($"[RecastNavigation] ✗ DLL copy unexpected error: {e.GetType().Name} - {e.Message}");
+                Debug.LogError($"[RecastNavigation] Stack trace:\n{e.StackTrace}");
+                Debug.LogError("[RecastNavigation] ===========================================");
+                
                 EditorUtility.DisplayDialog("오류", $"DLL 복사 실패: {e.Message}", "확인");
-                Debug.LogError($"DLL 복사 실패: {e.Message}");
             }
         }
         
+
+        
         /// <summary>
-        /// Domain Reload 후 DLL 복사를 스케줄합니다.
+        /// Force DLL unload using multiple strategies and schedule copy
         /// </summary>
         void ScheduleDllCopyAfterDomainReload()
         {
+            Debug.Log("[RecastNavigation] Attempting to unload DLL using multiple strategies...");
+            
+            // Strategy 1: Force garbage collection first
+            Debug.Log("[RecastNavigation] Step 1: Force garbage collection");
+            System.GC.Collect();
+            System.GC.WaitForPendingFinalizers();
+            System.GC.Collect();
+            
+            // Strategy 2: Request script reload (Domain Reload)
+            Debug.Log("[RecastNavigation] Step 2: Requesting script reload (Domain Reload)");
+            UnityEditor.EditorUtility.RequestScriptReload();
+            
+                         // Strategy 3: Request compilation (alternative approach)
+             Debug.Log("[RecastNavigation] Step 3: Requesting script compilation");
+             try 
+             {
+                 UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+                 
+                 // Also try to compile assemblies
+                 var assemblies = UnityEditor.Compilation.CompilationPipeline.GetAssemblies();
+                 Debug.Log($"[RecastNavigation] Found {assemblies.Length} assemblies in compilation pipeline");
+             }
+             catch (System.Exception ex)
+             {
+                 Debug.LogWarning($"[RecastNavigation] CompilationPipeline request failed: {ex.Message}");
+             }
+             
+             // Strategy 4: Resource cleanup
+             Debug.Log("[RecastNavigation] Step 4: Additional resource cleanup");
+             try
+             {
+                 UnityEngine.Resources.UnloadUnusedAssets();
+                 System.GC.Collect();
+             }
+             catch (System.Exception ex)
+             {
+                 Debug.LogWarning($"[RecastNavigation] Resource cleanup failed: {ex.Message}");
+             }
+            
             // EditorPrefs에 복사 예약 정보 저장
             EditorPrefs.SetString("RecastNavigation_PendingDllCopy_Source", dllPath);
             EditorPrefs.SetString("RecastNavigation_PendingDllCopy_Dest", Path.Combine("Assets/Plugins/", Path.GetFileName(dllPath)));
@@ -592,7 +659,7 @@ namespace RecastNavigation.Editor
             // Domain Reload 이벤트 구독
             EditorApplication.delayCall += () =>
             {
-                Debug.Log("Domain Reload를 시작합니다...");
+                Debug.Log("[RecastNavigation] Starting Domain Reload...");
                 
                 // 현재 창 닫기
                 Close();
@@ -630,59 +697,428 @@ namespace RecastNavigation.Editor
         /// </summary>
         static void ExecutePendingDllCopy(string sourcePath, string destPath)
         {
+            Debug.Log("[RecastNavigation] ===========================================");
+            Debug.Log("[RecastNavigation] Executing DLL Copy After Domain Reload");
+            Debug.Log("[RecastNavigation] ===========================================");
+            
             try
             {
-                Debug.Log($"Domain Reload 후 DLL 복사를 시작합니다: {sourcePath} -> {destPath}");
+                Debug.Log($"[RecastNavigation] Starting DLL copy after Domain Reload:");
+                Debug.Log($"[RecastNavigation] - Source: {sourcePath}");
+                Debug.Log($"[RecastNavigation] - Target: {destPath}");
                 
                 if (!File.Exists(sourcePath))
                 {
+                    Debug.LogError($"[RecastNavigation] ✗ Source DLL file not found: {sourcePath}");
                     EditorUtility.DisplayDialog("오류", $"소스 DLL 파일을 찾을 수 없습니다:\n{sourcePath}", "확인");
                     return;
                 }
                 
-                // Plugins 폴더 생성
-                string pluginsDir = Path.GetDirectoryName(destPath);
-                if (!Directory.Exists(pluginsDir))
+                // Log source file information
+                try
                 {
-                    Directory.CreateDirectory(pluginsDir);
+                    var sourceInfo = new FileInfo(sourcePath);
+                    Debug.Log($"[RecastNavigation] Source file size: {sourceInfo.Length} bytes");
+                    Debug.Log($"[RecastNavigation] Source file last write time: {sourceInfo.LastWriteTime}");
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[RecastNavigation] Failed to get source file info: {ex.Message}");
                 }
                 
-                // DLL 복사
+                // Create Plugins folder
+                string pluginsDir = Path.GetDirectoryName(destPath);
+                Debug.Log($"[RecastNavigation] Target directory: {pluginsDir}");
+                
+                if (!Directory.Exists(pluginsDir))
+                {
+                    Debug.Log("[RecastNavigation] Target directory does not exist. Creating...");
+                    Directory.CreateDirectory(pluginsDir);
+                    Debug.Log("[RecastNavigation] Target directory created successfully");
+                }
+                else
+                {
+                    Debug.Log("[RecastNavigation] Target directory already exists");
+                }
+                
+                // Check if existing file exists
+                if (File.Exists(destPath))
+                {
+                    Debug.Log("[RecastNavigation] Existing target file found. Proceeding with overwrite...");
+                    try
+                    {
+                        var destInfo = new FileInfo(destPath);
+                        Debug.Log($"[RecastNavigation] Existing file size: {destInfo.Length} bytes");
+                        Debug.Log($"[RecastNavigation] Existing file last write time: {destInfo.LastWriteTime}");
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[RecastNavigation] Failed to get existing file info: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    Debug.Log("[RecastNavigation] No existing file at target location. Creating new copy...");
+                }
+                
+                // DLL copy
+                Debug.Log("[RecastNavigation] Starting file copy...");
                 File.Copy(sourcePath, destPath, true);
+                Debug.Log("[RecastNavigation] File copy completed");
+                
+                Debug.Log("[RecastNavigation] Starting AssetDatabase refresh...");
                 AssetDatabase.Refresh();
+                Debug.Log("[RecastNavigation] AssetDatabase refresh completed");
                 
-                Debug.Log($"Domain Reload 후 DLL 복사 완료: {destPath}");
+                Debug.Log($"[RecastNavigation] ✓ DLL copy after Domain Reload completed: {destPath}");
                 
-                // 성공 알림 및 Setup Guide 다시 열기
+                // Success notification and reopen Setup Guide
                 EditorUtility.DisplayDialog("성공", 
                     "Domain Reload 후 DLL이 성공적으로 복사되었습니다!\n\n" +
                     "Setup Guide를 다시 열어서 다음 단계를 진행하세요.", 
                     "Setup Guide 열기");
                 
-                // Setup Guide 다시 열기
+                Debug.Log("[RecastNavigation] Reopening Setup Guide...");
+                // Reopen Setup Guide
                 ShowWindow();
+                
+                Debug.Log("[RecastNavigation] ===========================================");
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"Domain Reload 후 DLL 복사 실패: {e.Message}");
+                Debug.LogError($"[RecastNavigation] ✗ DLL copy after Domain Reload failed: {e.GetType().Name} - {e.Message}");
+                Debug.LogError($"[RecastNavigation] Stack trace:\n{e.StackTrace}");
+                Debug.LogError("[RecastNavigation] ===========================================");
+                
                 EditorUtility.DisplayDialog("오류", 
                     $"Domain Reload 후에도 DLL 복사에 실패했습니다:\n{e.Message}\n\n" +
                     "Unity Editor를 완전히 재시작해보세요.", 
                     "확인");
             }
         }
+        
+        /// <summary>
+        /// Attempt powerful DLL unload using multiple advanced strategies
+        /// </summary>
+        void AttemptPowerfulDllUnload()
+        {
+            Debug.Log("[RecastNavigation] Starting powerful DLL unload sequence...");
+            
+            // Strategy 1: Try specific DLL unload using PluginImporter (most efficient)
+            Debug.Log("[RecastNavigation] Strategy 1: Specific DLL unload using PluginImporter");
+            if (TryUnloadSpecificDll())
+            {
+                Debug.Log("[RecastNavigation] ✓ Specific DLL unload successful, skipping other strategies");
+                return;
+            }
+            
+            // Strategy 2: Assembly-specific unload attempt
+            Debug.Log("[RecastNavigation] Strategy 2: Assembly-specific unload attempt");
+            TryUnloadSpecificAssembly("UnityWrapper");
+            
+            // Strategy 3: Aggressive garbage collection
+            Debug.Log("[RecastNavigation] Strategy 3: Aggressive garbage collection");
+            for (int i = 0; i < 3; i++)
+            {
+                System.GC.Collect();
+                System.GC.WaitForPendingFinalizers();
+                System.GC.Collect();
+            }
+            
+            // Strategy 4: Unload unused assets
+            Debug.Log("[RecastNavigation] Strategy 4: Unload unused assets");
+            UnityEngine.Resources.UnloadUnusedAssets();
+            
+            // Strategy 5: Playmode cycling (fallback method)
+            Debug.Log("[RecastNavigation] Strategy 5: Playmode cycling for DLL unload");
+            StartPlaymodeCycleForDllUnload();
+        }
+        
+        /// <summary>
+        /// Try to unload specific DLL using PluginImporter settings
+        /// </summary>
+        bool TryUnloadSpecificDll()
+        {
+            try
+            {
+                string destPath = Path.Combine(Path.Combine(Application.dataPath, "Plugins"), Path.GetFileName(dllPath));
+                string relativePath = "Assets/Plugins/" + Path.GetFileName(dllPath);
+                
+                Debug.Log($"[RecastNavigation] Attempting specific DLL unload: {relativePath}");
+                
+                // Get PluginImporter for the DLL
+                PluginImporter pluginImporter = AssetImporter.GetAtPath(relativePath) as PluginImporter;
+                
+                if (pluginImporter != null)
+                {
+                    Debug.Log("[RecastNavigation] Found PluginImporter, temporarily disabling DLL...");
+                    
+                    // Store current settings
+                    bool wasEditorCompatible = pluginImporter.GetCompatibleWithEditor();
+                    bool wasAnyPlatformCompatible = pluginImporter.GetCompatibleWithAnyPlatform();
+                    
+                    // Temporarily disable DLL
+                    pluginImporter.SetCompatibleWithEditor(false);
+                    pluginImporter.SetCompatibleWithAnyPlatform(false);
+                    
+                    // Apply changes
+                    pluginImporter.SaveAndReimport();
+                    
+                    Debug.Log("[RecastNavigation] DLL disabled, waiting for unload...");
+                    
+                    // Small delay to ensure unload
+                    System.Threading.Thread.Sleep(500);
+                    
+                    try
+                    {
+                        Debug.Log("[RecastNavigation] Attempting file copy while DLL is disabled...");
+                        File.Copy(dllPath, destPath, true);
+                        Debug.Log("[RecastNavigation] ✓ File copy successful during DLL disable");
+                        
+                        // Re-enable DLL with original settings
+                        pluginImporter.SetCompatibleWithEditor(wasEditorCompatible);
+                        pluginImporter.SetCompatibleWithAnyPlatform(wasAnyPlatformCompatible);
+                        pluginImporter.SaveAndReimport();
+                        
+                        Debug.Log("[RecastNavigation] DLL re-enabled with new content");
+                        
+                        // Success! Update UI
+                        dllCopied = true;
+                        completedSteps[0] = true;
+                        SaveSettings();
+                        
+                        AssetDatabase.Refresh();
+                        
+                                                 // Create Assembly Definition file for better DLL control
+                         CreateAssemblyDefinitionFile();
+                         
+                         EditorUtility.DisplayDialog("성공", 
+                             "특정 DLL 언로드를 통해 성공적으로 복사되었습니다!\n" +
+                             "전체 Domain Reload 없이 완료되었으며,\n" +
+                             "Assembly Definition 파일도 생성되었습니다.", 
+                             "확인");
+                        
+                        Debug.Log("[RecastNavigation] ✓ Specific DLL unload and replace completed successfully");
+                        return true;
+                    }
+                    catch (System.Exception copyEx)
+                    {
+                        Debug.LogWarning($"[RecastNavigation] File copy failed even with DLL disabled: {copyEx.Message}");
+                        
+                        // Restore original settings
+                        pluginImporter.SetCompatibleWithEditor(wasEditorCompatible);
+                        pluginImporter.SetCompatibleWithAnyPlatform(wasAnyPlatformCompatible);
+                        pluginImporter.SaveAndReimport();
+                        
+                        return false;
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("[RecastNavigation] Could not find PluginImporter for target DLL");
+                    return false;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[RecastNavigation] Specific DLL unload failed: {ex.Message}");
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Try to unload specific assembly by name
+        /// </summary>
+        void TryUnloadSpecificAssembly(string assemblyName)
+        {
+            try
+            {
+                Debug.Log($"[RecastNavigation] Attempting to unload assembly: {assemblyName}");
+                
+                // Get all loaded assemblies
+                var assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
+                var targetAssembly = assemblies.FirstOrDefault(a => a.GetName().Name.Contains(assemblyName));
+                
+                if (targetAssembly != null)
+                {
+                    Debug.Log($"[RecastNavigation] Found target assembly: {targetAssembly.FullName}");
+                    
+                    // Get all types from assembly (this can help release references)
+                    var types = targetAssembly.GetTypes();
+                    Debug.Log($"[RecastNavigation] Assembly contains {types.Length} types");
+                    
+                    // Clear references and force GC
+                    targetAssembly = null;
+                    types = null;
+                    
+                    System.GC.Collect();
+                    System.GC.WaitForPendingFinalizers();
+                    System.GC.Collect();
+                    
+                    Debug.Log("[RecastNavigation] Assembly reference cleared and GC executed");
+                }
+                else
+                {
+                    Debug.LogWarning($"[RecastNavigation] Assembly containing '{assemblyName}' not found");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[RecastNavigation] Assembly unload attempt failed: {ex.Message}");
+            }
+                 }
+         
+         /// <summary>
+         /// Create Assembly Definition file for better DLL control
+         /// </summary>
+         void CreateAssemblyDefinitionFile()
+         {
+             try
+             {
+                 string pluginsPath = Path.Combine(Application.dataPath, "Plugins");
+                 string asmdefPath = Path.Combine(pluginsPath, "RecastNavigation.Runtime.asmdef");
+                 
+                 if (File.Exists(asmdefPath))
+                 {
+                     Debug.Log("[RecastNavigation] Assembly Definition file already exists, skipping creation");
+                     return;
+                 }
+                 
+                 Debug.Log("[RecastNavigation] Creating Assembly Definition file for better DLL control...");
+                 
+                 // Assembly Definition JSON content
+                 string asmdefContent = @"{
+    ""name"": ""RecastNavigation.Runtime"",
+    ""rootNamespace"": ""RecastNavigation"",
+    ""references"": [],
+    ""includePlatforms"": [],
+    ""excludePlatforms"": [],
+    ""allowUnsafeCode"": false,
+    ""overrideReferences"": true,
+    ""precompiledReferences"": [
+        ""UnityWrapper.dll""
+    ],
+    ""autoReferenced"": true,
+    ""defineConstraints"": [],
+    ""versionDefines"": [],
+    ""noEngineReferences"": false
+}";
+                 
+                 File.WriteAllText(asmdefPath, asmdefContent);
+                 Debug.Log($"[RecastNavigation] ✓ Assembly Definition file created: {asmdefPath}");
+                 
+                 // Also create meta file to avoid import issues
+                 string metaPath = asmdefPath + ".meta";
+                 if (!File.Exists(metaPath))
+                 {
+                     string metaContent = @"fileFormatVersion: 2
+guid: " + System.Guid.NewGuid().ToString("N") + @"
+AssemblyDefinitionImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+";
+                     File.WriteAllText(metaPath, metaContent);
+                     Debug.Log("[RecastNavigation] ✓ Assembly Definition meta file created");
+                 }
+             }
+             catch (System.Exception ex)
+             {
+                 Debug.LogWarning($"[RecastNavigation] Failed to create Assembly Definition file: {ex.Message}");
+             }
+         }
+         
+         /// <summary>
+         /// Use playmode cycling to force DLL unload (most effective method)
+         /// </summary>
+        void StartPlaymodeCycleForDllUnload()
+        {
+            if (UnityEditor.EditorApplication.isPlaying)
+            {
+                Debug.Log("[RecastNavigation] Already in play mode, skipping playmode cycle");
+                ScheduleDllCopyAfterDomainReload();
+                return;
+            }
+            
+            Debug.Log("[RecastNavigation] Starting playmode cycle to force DLL unload...");
+            
+            // Store the DLL copy request for after playmode cycle
+            string destPath = Path.Combine(Path.Combine(Application.dataPath, "Plugins"), Path.GetFileName(dllPath));
+            EditorPrefs.SetString("RecastNavigation_PendingDllCopy_Source", dllPath);
+            EditorPrefs.SetString("RecastNavigation_PendingDllCopy_Dest", destPath);
+            EditorPrefs.SetBool("RecastNavigation_PlaymodeCycleInProgress", true);
+            
+            // Hook into playmode state changes
+            UnityEditor.EditorApplication.playModeStateChanged += OnPlayModeStateChangedForDllUnload;
+            
+            // Enter play mode
+            Debug.Log("[RecastNavigation] Entering play mode to unload DLL...");
+            UnityEditor.EditorApplication.isPlaying = true;
+        }
+        
+        /// <summary>
+        /// Handle playmode state changes for DLL unloading
+        /// </summary>
+        static void OnPlayModeStateChangedForDllUnload(UnityEditor.PlayModeStateChange state)
+        {
+            Debug.Log($"[RecastNavigation] Playmode state changed: {state}");
+            
+            if (state == UnityEditor.PlayModeStateChange.EnteredPlayMode)
+            {
+                Debug.Log("[RecastNavigation] Entered play mode, will exit shortly to unload DLL...");
+                // Exit play mode after a short delay
+                UnityEditor.EditorApplication.delayCall += () => {
+                    if (UnityEditor.EditorApplication.isPlaying)
+                    {
+                        Debug.Log("[RecastNavigation] Exiting play mode to complete DLL unload...");
+                        UnityEditor.EditorApplication.isPlaying = false;
+                    }
+                };
+            }
+            else if (state == UnityEditor.PlayModeStateChange.EnteredEditMode)
+            {
+                Debug.Log("[RecastNavigation] Exited play mode, DLL should be unloaded now");
+                
+                // Unhook the event
+                UnityEditor.EditorApplication.playModeStateChanged -= OnPlayModeStateChangedForDllUnload;
+                
+                // Check if we have a pending DLL copy
+                if (EditorPrefs.GetBool("RecastNavigation_PlaymodeCycleInProgress", false))
+                {
+                    EditorPrefs.DeleteKey("RecastNavigation_PlaymodeCycleInProgress");
+                    
+                    string sourcePath = EditorPrefs.GetString("RecastNavigation_PendingDllCopy_Source", "");
+                    string destPath = EditorPrefs.GetString("RecastNavigation_PendingDllCopy_Dest", "");
+                    
+                    if (!string.IsNullOrEmpty(sourcePath) && !string.IsNullOrEmpty(destPath))
+                    {
+                        Debug.Log("[RecastNavigation] Executing pending DLL copy after playmode cycle...");
+                        
+                        // Small delay to ensure everything is settled
+                        UnityEditor.EditorApplication.delayCall += () => {
+                            ExecutePendingDllCopy(sourcePath, destPath);
+                        };
+                    }
+                }
+            }
+        }
 
         /// <summary>
-        /// 파일을 사용하고 있는 프로세스 목록을 가져옵니다.
+        /// 파일을 사용하고 있는 프로세스 목록을 가져옵니다. (개선된 버전)
         /// </summary>
         /// <param name="filePath">확인할 파일 경로</param>
         /// <returns>프로세스 정보 문자열</returns>
         string GetProcessesUsingFile(string filePath)
         {
+            Debug.Log($"[RecastNavigation] Starting process check for file usage: {filePath}");
+            
             try
             {
-                // handle.exe 도구를 사용하여 파일을 사용하는 프로세스 확인
-                // (Windows Sysinternals 도구가 설치되어 있는 경우)
+                // Check processes using file with handle.exe tool
+                // (if Windows Sysinternals tool is installed)
+                Debug.Log("[RecastNavigation] Attempting process check using handle.exe tool...");
+                
                 var processStartInfo = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "handle.exe",
@@ -698,21 +1134,50 @@ namespace RecastNavigation.Editor
                     if (process != null)
                     {
                         string output = process.StandardOutput.ReadToEnd();
+                        string error = process.StandardError.ReadToEnd();
                         process.WaitForExit();
+                        
+                        Debug.Log($"[RecastNavigation] handle.exe execution result - ExitCode: {process.ExitCode}");
+                        
+                        if (!string.IsNullOrEmpty(error))
+                        {
+                            Debug.LogWarning($"[RecastNavigation] handle.exe error: {error}");
+                        }
                         
                         if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
                         {
-                            return ParseHandleOutput(output);
+                            Debug.Log($"[RecastNavigation] handle.exe output:\n{output}");
+                            string parsedResult = ParseHandleOutput(output);
+                            if (!string.IsNullOrEmpty(parsedResult))
+                            {
+                                Debug.Log($"[RecastNavigation] Parsed process information:\n{parsedResult}");
+                                return parsedResult;
+                            }
                         }
+                        else
+                        {
+                            Debug.LogWarning($"[RecastNavigation] handle.exe execution failed or no output");
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[RecastNavigation] Failed to start handle.exe process");
                     }
                 }
             }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                Debug.LogWarning($"[RecastNavigation] Cannot find handle.exe: {ex.Message}");
+                Debug.Log("[RecastNavigation] Windows Sysinternals handle.exe is not installed or not in PATH");
+            }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"프로세스 확인 중 오류: {ex.Message}");
+                Debug.LogWarning($"[RecastNavigation] Error executing handle.exe: {ex.Message}");
+                Debug.LogWarning($"[RecastNavigation] Error type: {ex.GetType().Name}");
             }
 
-            // handle.exe가 없거나 실패한 경우 일반적인 프로세스들 확인
+            // Fall back to general process check if handle.exe is unavailable or fails
+            Debug.Log("[RecastNavigation] Falling back to general process check...");
             return GetCommonProcessesInfo(filePath);
         }
 
@@ -736,92 +1201,164 @@ namespace RecastNavigation.Editor
         }
 
         /// <summary>
-        /// 일반적으로 DLL을 사용할 수 있는 프로세스들을 확인합니다.
+        /// 일반적으로 DLL을 사용할 수 있는 프로세스들을 확인합니다. (개선된 버전)
         /// </summary>
         string GetCommonProcessesInfo(string filePath)
         {
             var runningProcesses = new System.Collections.Generic.List<string>();
             string fileName = Path.GetFileName(filePath);
             
+            Debug.Log($"[RecastNavigation] Starting general process check - Target file: {fileName}");
+            
             try
             {
                 var processes = System.Diagnostics.Process.GetProcesses();
+                Debug.Log($"[RecastNavigation] Total process count: {processes.Length}");
+                
+                int checkedCount = 0;
+                int suspiciousCount = 0;
+                
                 foreach (var process in processes)
                 {
                     try
                     {
-                        if (process.ProcessName.ToLower().Contains("unity") ||
-                            process.ProcessName.ToLower().Contains("devenv") ||
-                            process.ProcessName.ToLower().Contains("code") ||
-                            process.ProcessName.ToLower().Contains("rider"))
+                        checkedCount++;
+                        string processName = process.ProcessName.ToLower();
+                        
+                        if (processName.Contains("unity") ||
+                            processName.Contains("devenv") ||
+                            processName.Contains("code") ||
+                            processName.Contains("rider") ||
+                            processName.Contains("msbuild") ||
+                            processName.Contains("dotnet"))
                         {
-                            runningProcesses.Add($"{process.ProcessName} (PID: {process.Id})");
+                            suspiciousCount++;
+                            string processInfo = $"{process.ProcessName} (PID: {process.Id})";
+                            runningProcesses.Add(processInfo);
+                            Debug.Log($"[RecastNavigation] Suspicious process found: {processInfo}");
+                            
+                            // Also log process start time
+                            try
+                            {
+                                Debug.Log($"[RecastNavigation] - Start time: {process.StartTime}");
+                                Debug.Log($"[RecastNavigation] - Working directory: {process.StartInfo.WorkingDirectory}");
+                            }
+                            catch (System.Exception innerEx)
+                            {
+                                Debug.LogWarning($"[RecastNavigation] - Process info access restricted: {innerEx.Message}");
+                            }
                         }
                     }
-                    catch
+                    catch (System.Exception ex)
                     {
-                        // 일부 프로세스는 접근이 제한될 수 있음
+                        // Some processes may have restricted access
+                        Debug.LogWarning($"[RecastNavigation] Process access restricted (PID {process.Id}): {ex.Message}");
                     }
                 }
+                
+                Debug.Log($"[RecastNavigation] Process check completed - Checked: {checkedCount}, Suspicious: {suspiciousCount}");
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"프로세스 목록 확인 중 오류: {ex.Message}");
+                Debug.LogError($"[RecastNavigation] Error checking process list: {ex.Message}");
+                Debug.LogError($"[RecastNavigation] Stack trace:\n{ex.StackTrace}");
             }
 
             if (runningProcesses.Count > 0)
             {
-                return "의심되는 프로세스들:\n" + string.Join("\n", runningProcesses);
+                string result = "의심되는 프로세스들:\n" + string.Join("\n", runningProcesses);
+                Debug.Log($"[RecastNavigation] Final result:\n{result}");
+                return result;
             }
             
-            return "Unity, Visual Studio, VS Code, Rider 등이 실행 중인지 확인해보세요.";
+            string fallbackMsg = "Unity, Visual Studio, VS Code, Rider 등이 실행 중인지 확인해보세요.";
+            Debug.Log($"[RecastNavigation] No suspicious processes found: {fallbackMsg}");
+            return fallbackMsg;
         }
 
         /// <summary>
-        /// 파일을 다른 이름으로 복사합니다.
+        /// 파일을 다른 이름으로 복사합니다. (개선된 버전)
         /// </summary>
         bool CopyWithAlternateName(string sourcePath, string destPath)
         {
+            Debug.Log("[RecastNavigation] -------------------------------------------");
+            Debug.Log("[RecastNavigation] Starting Backup Method DLL Copy");
+            Debug.Log("[RecastNavigation] -------------------------------------------");
+            
             try
             {
                 string directory = Path.GetDirectoryName(destPath);
                 string fileName = Path.GetFileNameWithoutExtension(destPath);
                 string extension = Path.GetExtension(destPath);
                 
-                // 기존 파일을 백업으로 이름 변경
+                Debug.Log($"[RecastNavigation] Backup path composition:");
+                Debug.Log($"[RecastNavigation] - Directory: {directory}");
+                Debug.Log($"[RecastNavigation] - File name: {fileName}");
+                Debug.Log($"[RecastNavigation] - Extension: {extension}");
+                
+                // Rename existing file to backup
                 string backupPath = Path.Combine(directory, $"{fileName}_backup_{System.DateTime.Now:yyyyMMdd_HHmmss}{extension}");
+                Debug.Log($"[RecastNavigation] Backup file path: {backupPath}");
                 
                 if (File.Exists(destPath))
                 {
+                    Debug.Log("[RecastNavigation] Existing file found. Moving to backup...");
+                    
+                    // Log existing file information
+                    try
+                    {
+                        var destInfo = new FileInfo(destPath);
+                        Debug.Log($"[RecastNavigation] Existing file size: {destInfo.Length} bytes");
+                        Debug.Log($"[RecastNavigation] Existing file last write time: {destInfo.LastWriteTime}");
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[RecastNavigation] Failed to get existing file info: {ex.Message}");
+                    }
+                    
                     File.Move(destPath, backupPath);
-                    Debug.Log($"기존 파일을 백업으로 이동: {backupPath}");
+                    Debug.Log($"[RecastNavigation] ✓ Existing file moved to backup completed: {backupPath}");
+                }
+                else
+                {
+                    Debug.Log("[RecastNavigation] No existing file found. Skipping backup step");
                 }
                 
-                // 새 파일 복사
+                // Copy new file
+                Debug.Log("[RecastNavigation] Starting new file copy...");
                 File.Copy(sourcePath, destPath, false);
+                Debug.Log("[RecastNavigation] New file copy completed");
+                
+                Debug.Log("[RecastNavigation] Starting AssetDatabase refresh...");
                 AssetDatabase.Refresh();
+                Debug.Log("[RecastNavigation] AssetDatabase refresh completed");
                 
                 dllCopied = true;
                 completedSteps[0] = true;
                 SaveSettings();
+                Debug.Log("[RecastNavigation] Settings saved");
                 
                 EditorUtility.DisplayDialog("성공", 
                     $"DLL이 성공적으로 복사되었습니다.\n기존 파일은 백업되었습니다:\n{backupPath}", 
                     "확인");
-                Debug.Log($"DLL 복사 완료 (백업 방식): {destPath}");
+                Debug.Log($"[RecastNavigation] ✓ DLL backup copy completed: {destPath}");
+                Debug.Log("[RecastNavigation] -------------------------------------------");
                 
                 return true;
             }
             catch (System.Exception ex)
             {
+                Debug.LogError($"[RecastNavigation] ✗ Backup copy failed: {ex.GetType().Name} - {ex.Message}");
+                Debug.LogError($"[RecastNavigation] Stack trace:\n{ex.StackTrace}");
+                Debug.LogError("[RecastNavigation] -------------------------------------------");
+                
                 EditorUtility.DisplayDialog("오류", $"백업 복사 실패: {ex.Message}", "확인");
-                Debug.LogError($"백업 복사 실패: {ex.Message}");
                 return false;
             }
         }
 
         /// <summary>
-        /// 파일의 MD5 해시 값을 계산합니다.
+        /// 파일의 MD5 해시 값을 계산합니다. (개선된 버전)
         /// </summary>
         /// <param name="filePath">파일 경로</param>
         /// <returns>MD5 해시 문자열</returns>
@@ -830,72 +1367,59 @@ namespace RecastNavigation.Editor
         string GetFileMD5Hash(string filePath)
         {
             const int maxRetries = 3;
-            const int retryDelayMs = 100;
+            const int retryDelayMs = 200;
             
-            Debug.Log($"MD5 해시 계산 시작: {filePath}");
+            Debug.Log($"[RecastNavigation] Starting MD5 hash calculation: {filePath}");
             
             for (int retry = 0; retry < maxRetries; retry++)
             {
-                FileStream stream = null;
-                MD5 md5 = null;
-                
                 try
                 {
-                    md5 = MD5.Create();
-                    
-                    // 공유 읽기 모드로 파일 열기 (다른 프로세스가 읽기 중이어도 접근 가능)
-                    stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    Debug.Log($"파일 스트림 열기 성공 (시도 {retry + 1}): {filePath}");
-                    
-                    byte[] hash = md5.ComputeHash(stream);
-                    string hashString = System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-                    
-                    Debug.Log($"MD5 해시 계산 완료: {hashString}");
-                    return hashString;
+                    // Use using statements to ensure automatic resource disposal
+                    using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var md5 = MD5.Create())
+                    {
+                        Debug.Log($"[RecastNavigation] File stream opened successfully (attempt {retry + 1}/{maxRetries}): {filePath}");
+                        
+                        // Check file size
+                        Debug.Log($"[RecastNavigation] File size: {stream.Length} bytes");
+                        
+                        byte[] hash = md5.ComputeHash(stream);
+                        string hashString = System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                        
+                        Debug.Log($"[RecastNavigation] MD5 hash calculation completed: {hashString}");
+                        return hashString;
+                    }
                 }
                 catch (System.IO.IOException ex) when (retry < maxRetries - 1)
                 {
-                    // 마지막 시도가 아닌 경우에만 재시도
-                    Debug.LogWarning($"MD5 계산 재시도 {retry + 1}/{maxRetries} (IOException): {ex.Message}");
+                    // Retry only if not the last attempt
+                    Debug.LogWarning($"[RecastNavigation] MD5 calculation retry {retry + 1}/{maxRetries} - IOException: {ex.Message}");
+                    Debug.LogWarning($"[RecastNavigation] Retrying after {retryDelayMs}ms...");
                     System.Threading.Thread.Sleep(retryDelayMs);
                     continue;
                 }
                 catch (System.UnauthorizedAccessException ex)
                 {
-                    // 권한 오류는 재시도해도 의미 없음
-                    Debug.LogError($"MD5 계산 권한 오류: {ex.Message}");
+                    // Permission errors are not worth retrying
+                    Debug.LogError($"[RecastNavigation] MD5 calculation permission error: {ex.Message}");
+                    Debug.LogError($"[RecastNavigation] File path: {filePath}");
                     throw;
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogError($"MD5 계산 예상치 못한 오류 (시도 {retry + 1}): {ex.GetType().Name} - {ex.Message}");
+                    Debug.LogError($"[RecastNavigation] MD5 calculation unexpected error (attempt {retry + 1}/{maxRetries}): {ex.GetType().Name} - {ex.Message}");
+                    Debug.LogError($"[RecastNavigation] Stack trace:\n{ex.StackTrace}");
+                    
                     if (retry == maxRetries - 1) throw;
                     System.Threading.Thread.Sleep(retryDelayMs);
                 }
-                finally
-                {
-                    // 명시적으로 리소스 해제
-                    try
-                    {
-                        stream?.Close();
-                        stream?.Dispose();
-                        md5?.Dispose();
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogWarning($"리소스 해제 중 오류: {ex.Message}");
-                    }
-                    
-                    // 가비지 컬렉션 강제 실행으로 파일 핸들 완전히 해제
-                    System.GC.Collect();
-                    System.GC.WaitForPendingFinalizers();
-                    
-                    Debug.Log($"파일 핸들 해제 완료 (시도 {retry + 1}): {filePath}");
-                }
             }
             
-            // 모든 재시도 실패 시 예외를 다시 던짐
-            throw new System.IO.IOException($"파일 '{filePath}'의 MD5 해시를 계산할 수 없습니다. 파일이 사용 중이거나 접근할 수 없습니다.");
+            // Throw exception if all retries failed
+            string errorMsg = $"Cannot calculate MD5 hash for file '{filePath}'. File is in use or inaccessible.";
+            Debug.LogError($"[RecastNavigation] {errorMsg}");
+            throw new System.IO.IOException(errorMsg);
         }
         
         void ImportScripts()
