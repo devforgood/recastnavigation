@@ -167,30 +167,47 @@ UNITY_API UnityNavMeshResult UnityRecast_BuildNavMesh(
     const UnityMeshData* meshData,
     const UnityNavMeshBuildSettings* settings
 ) {
+    UNITY_LOG_INFO("=== UnityRecast_BuildNavMesh Start ===");
     UnityNavMeshResult result = {0};
     
+    // 1. Check initialization status
+    UNITY_LOG_INFO("1. Checking initialization status...");
     if (!g_initialized) {
+        UNITY_LOG_ERROR("RecastNavigation not initialized!");
         result.success = false;
         result.errorMessage = const_cast<char*>("RecastNavigation not initialized");
         return result;
     }
+    UNITY_LOG_INFO("Initialization status: OK");
     
+    // 2. Validate parameters
+    UNITY_LOG_INFO("2. Validating parameters...");
     if (!meshData || !settings) {
+        UNITY_LOG_ERROR("Invalid parameters! meshData=%p, settings=%p", meshData, settings);
         result.success = false;
         result.errorMessage = const_cast<char*>("Invalid parameters");
         return result;
     }
     
+    UNITY_LOG_INFO("Mesh data: vertexCount=%d, indexCount=%d", meshData->vertexCount, meshData->indexCount);
+    UNITY_LOG_INFO("Build settings: cellSize=%.3f, cellHeight=%.3f", settings->cellSize, settings->cellHeight);
+    UNITY_LOG_INFO("Build settings: walkableHeight=%.3f, walkableRadius=%.3f", settings->walkableHeight, settings->walkableRadius);
+    UNITY_LOG_INFO("Coordinate transform: autoTransform=%s, meshTransform=%s", 
+                   settings->autoTransformCoordinates ? "true" : "false",
+                   meshData->transformCoordinates ? "true" : "false");
+    
     try {
-        // 좌표 변환이 필요한 경우 메시 데이터 복사 및 변환
+        // 3. Process coordinate transformation
+        UNITY_LOG_INFO("3. Processing coordinate transformation...");
         UnityMeshData transformedMeshData = *meshData;
         std::vector<float> transformedVertices;
         
         if (settings->autoTransformCoordinates || meshData->transformCoordinates) {
+            UNITY_LOG_INFO("Applying coordinate transformation...");
             transformedVertices.resize(meshData->vertexCount * 3);
             std::memcpy(transformedVertices.data(), meshData->vertices, meshData->vertexCount * 3 * sizeof(float));
             
-            // 모든 정점에 좌표 변환 적용
+            // Apply coordinate transformation to all vertices
             for (int i = 0; i < meshData->vertexCount; ++i) {
                 float* x = &transformedVertices[i * 3];
                 float* y = &transformedVertices[i * 3 + 1];
@@ -199,24 +216,40 @@ UNITY_API UnityNavMeshResult UnityRecast_BuildNavMesh(
             }
             
             transformedMeshData.vertices = transformedVertices.data();
-            transformedMeshData.transformCoordinates = false; // 이미 변환됨
+            transformedMeshData.transformCoordinates = false; // Already transformed
+            UNITY_LOG_INFO("Coordinate transformation completed");
+        }
+        else {
+            UNITY_LOG_INFO("Skipping coordinate transformation");
         }
         
+        // 4. Execute NavMesh build
+        UNITY_LOG_INFO("4. Executing NavMesh build...");
         result = g_navMeshBuilder->BuildNavMesh(&transformedMeshData, settings);
         
         if (result.success) {
-            // NavMesh가 성공적으로 빌드되면 Pathfinding에 설정
+            UNITY_LOG_INFO("NavMesh build successful! Data size: %d bytes", result.dataSize);
+            
+            // 5. Setup Pathfinding
+            UNITY_LOG_INFO("5. Setting up Pathfinding...");
             g_pathfinding->SetNavMesh(
                 g_navMeshBuilder->GetNavMesh(),
                 g_navMeshBuilder->GetNavMeshQuery()
             );
+            UNITY_LOG_INFO("Pathfinding setup completed");
+            UNITY_LOG_INFO("=== UnityRecast_BuildNavMesh Completed ===");
+        }
+        else {
+            UNITY_LOG_ERROR("NavMesh build failed: %s", result.errorMessage ? result.errorMessage : "Unknown error");
         }
     }
     catch (const std::exception& e) {
+        UNITY_LOG_ERROR("Exception during NavMesh build: %s", e.what());
         result.success = false;
         result.errorMessage = const_cast<char*>(e.what());
     }
     catch (...) {
+        UNITY_LOG_ERROR("Unknown exception during NavMesh build");
         result.success = false;
         result.errorMessage = const_cast<char*>("Unknown error occurred");
     }
@@ -240,28 +273,59 @@ UNITY_API void UnityRecast_FreeNavMeshData(UnityNavMeshResult* result) {
 }
 
 UNITY_API bool UnityRecast_LoadNavMesh(const unsigned char* data, int dataSize) {
-    if (!g_initialized) {
-        return false;
-    }
+    UNITY_LOG_INFO("=== UnityRecast_LoadNavMesh Start ===");
     
-    if (!data || dataSize <= 0) {
+    // 1. Check initialization status
+    UNITY_LOG_INFO("1. Checking initialization status...");
+    if (!g_initialized) {
+        UNITY_LOG_ERROR("RecastNavigation not initialized!");
         return false;
     }
+    UNITY_LOG_INFO("Initialization status: OK");
+    
+    // 2. Validate parameters
+    UNITY_LOG_INFO("2. Validating parameters...");
+    if (!data || dataSize <= 0) {
+        UNITY_LOG_ERROR("Invalid parameters! data=%p, dataSize=%d", data, dataSize);
+        return false;
+    }
+    UNITY_LOG_INFO("NavMesh data: %d bytes", dataSize);
     
     try {
+        // 3. Attempt NavMesh load
+        UNITY_LOG_INFO("3. Attempting NavMesh load...");
         bool success = g_navMeshBuilder->LoadNavMesh(data, dataSize);
         
         if (success) {
-            // NavMesh가 성공적으로 로드되면 Pathfinding에 설정
+            UNITY_LOG_INFO("NavMesh load successful!");
+            
+            // 4. Setup Pathfinding
+            UNITY_LOG_INFO("4. Setting up Pathfinding...");
             g_pathfinding->SetNavMesh(
                 g_navMeshBuilder->GetNavMesh(),
                 g_navMeshBuilder->GetNavMeshQuery()
             );
+            UNITY_LOG_INFO("Pathfinding setup completed");
+            
+            // 5. Output loaded NavMesh information
+            int polyCount = g_navMeshBuilder->GetPolyCount();
+            int vertCount = g_navMeshBuilder->GetVertexCount();
+            UNITY_LOG_INFO("Loaded NavMesh info: polygons=%d, vertices=%d", polyCount, vertCount);
+            
+            UNITY_LOG_INFO("=== UnityRecast_LoadNavMesh Completed ===");
+        }
+        else {
+            UNITY_LOG_ERROR("NavMesh load failed! LoadNavMesh function returned false.");
         }
         
         return success;
     }
+    catch (const std::exception& e) {
+        UNITY_LOG_ERROR("Exception during NavMesh load: %s", e.what());
+        return false;
+    }
     catch (...) {
+        UNITY_LOG_ERROR("Unknown exception during NavMesh load");
         return false;
     }
 }
@@ -270,31 +334,73 @@ UNITY_API UnityPathResult UnityRecast_FindPath(
     float startX, float startY, float startZ,
     float endX, float endY, float endZ
 ) {
+    UNITY_LOG_INFO("=== UnityRecast_FindPath Start ===");
     UnityPathResult result = {0};
     
+    // 1. Check initialization status
+    UNITY_LOG_INFO("1. Checking initialization status...");
     if (!g_initialized) {
+        UNITY_LOG_ERROR("RecastNavigation not initialized!");
         result.success = false;
         result.errorMessage = const_cast<char*>("RecastNavigation not initialized");
         return result;
     }
+    UNITY_LOG_INFO("Initialization status: OK");
+    
+    // 2. Log input coordinates
+    UNITY_LOG_INFO("2. Input coordinates:");
+    UNITY_LOG_INFO("  Start point: (%.3f, %.3f, %.3f)", startX, startY, startZ);
+    UNITY_LOG_INFO("  End point: (%.3f, %.3f, %.3f)", endX, endY, endZ);
     
     try {
-        // 시작점과 끝점을 RecastNavigation 좌표계로 변환
+        // 3. Coordinate transformation
+        UNITY_LOG_INFO("3. Coordinate transformation...");
+        float origStartX = startX, origStartY = startY, origStartZ = startZ;
+        float origEndX = endX, origEndY = endY, origEndZ = endZ;
+        
         TransformVertex(&startX, &startY, &startZ);
         TransformVertex(&endX, &endY, &endZ);
         
+        UNITY_LOG_INFO("  Transformed start point: (%.3f, %.3f, %.3f)", startX, startY, startZ);
+        UNITY_LOG_INFO("  Transformed end point: (%.3f, %.3f, %.3f)", endX, endY, endZ);
+        
+        // 4. Execute pathfinding
+        UNITY_LOG_INFO("4. Executing pathfinding...");
         result = g_pathfinding->FindPath(startX, startY, startZ, endX, endY, endZ);
         
-        // 경로 결과를 Unity 좌표계로 변환
-        if (result.success && result.pathPoints) {
-            UnityRecast_TransformPathPoints(result.pathPoints, result.pointCount);
+        if (result.success) {
+            UNITY_LOG_INFO("Pathfinding successful! Point count: %d", result.pointCount);
+            
+            // 5. Transform path results to Unity coordinate system
+            if (result.pathPoints) {
+                UNITY_LOG_INFO("5. Transforming path coordinates...");
+                UnityRecast_TransformPathPoints(result.pathPoints, result.pointCount);
+                
+                // Log first and last points
+                if (result.pointCount > 0) {
+                    UNITY_LOG_INFO("  First point: (%.3f, %.3f, %.3f)", 
+                                   result.pathPoints[0], result.pathPoints[1], result.pathPoints[2]);
+                }
+                if (result.pointCount > 1) {
+                    int lastIdx = (result.pointCount - 1) * 3;
+                    UNITY_LOG_INFO("  Last point: (%.3f, %.3f, %.3f)", 
+                                   result.pathPoints[lastIdx], result.pathPoints[lastIdx + 1], result.pathPoints[lastIdx + 2]);
+                }
+            }
+            
+            UNITY_LOG_INFO("=== UnityRecast_FindPath Completed ===");
+        }
+        else {
+            UNITY_LOG_ERROR("Pathfinding failed: %s", result.errorMessage ? result.errorMessage : "Unknown error");
         }
     }
     catch (const std::exception& e) {
+        UNITY_LOG_ERROR("Exception during pathfinding: %s", e.what());
         result.success = false;
         result.errorMessage = const_cast<char*>(e.what());
     }
     catch (...) {
+        UNITY_LOG_ERROR("Unknown exception during pathfinding");
         result.success = false;
         result.errorMessage = const_cast<char*>("Unknown error occurred during pathfinding");
     }
@@ -318,19 +424,29 @@ UNITY_API void UnityRecast_FreePathResult(UnityPathResult* result) {
 }
 
 UNITY_API int UnityRecast_GetPolyCount() {
+    UNITY_LOG_DEBUG("UnityRecast_GetPolyCount called");
+    
     if (!g_initialized || !g_navMeshBuilder) {
+        UNITY_LOG_DEBUG("Not initialized or NavMeshBuilder is null");
         return 0;
     }
     
-    return g_navMeshBuilder->GetPolyCount();
+    int polyCount = g_navMeshBuilder->GetPolyCount();
+    UNITY_LOG_DEBUG("Polygon count: %d", polyCount);
+    return polyCount;
 }
 
 UNITY_API int UnityRecast_GetVertexCount() {
+    UNITY_LOG_DEBUG("UnityRecast_GetVertexCount called");
+    
     if (!g_initialized || !g_navMeshBuilder) {
+        UNITY_LOG_DEBUG("Not initialized or NavMeshBuilder is null");
         return 0;
     }
     
-    return g_navMeshBuilder->GetVertexCount();
+    int vertexCount = g_navMeshBuilder->GetVertexCount();
+    UNITY_LOG_DEBUG("Vertex count: %d", vertexCount);
+    return vertexCount;
 }
 
 // 디버그 기능들 (향후 구현)

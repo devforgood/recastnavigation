@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using RecastNavigation;
 using System.IO;
+using System.Security.Cryptography;
 
 namespace RecastNavigation.Editor
 {
@@ -424,6 +425,29 @@ namespace RecastNavigation.Editor
             
             try
             {
+                // 대상 파일이 이미 존재하는 경우 MD5 해시 비교
+                if (File.Exists(destPath))
+                {
+                    string sourceMD5 = GetFileMD5Hash(dllPath);
+                    string destMD5 = GetFileMD5Hash(destPath);
+                    
+                    if (sourceMD5 == destMD5)
+                    {
+                        // 파일이 동일하면 복사하지 않고 성공 처리
+                        dllCopied = true;
+                        completedSteps[0] = true;
+                        SaveSettings(); // 설정 자동 저장
+                        
+                        EditorUtility.DisplayDialog("성공", "DLL 파일이 이미 최신 상태입니다. 복사를 건너뜁니다.", "확인");
+                        Debug.Log($"DLL 파일이 이미 최신 상태입니다. MD5: {sourceMD5}");
+                        return;
+                    }
+                    else
+                    {
+                        Debug.Log($"DLL 파일이 다릅니다. 소스 MD5: {sourceMD5}, 대상 MD5: {destMD5}");
+                    }
+                }
+                
                 File.Copy(dllPath, destPath, true);
                 AssetDatabase.Refresh();
                 
@@ -438,6 +462,23 @@ namespace RecastNavigation.Editor
             {
                 EditorUtility.DisplayDialog("오류", $"DLL 복사 실패: {e.Message}", "확인");
                 Debug.LogError($"DLL 복사 실패: {e.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// 파일의 MD5 해시 값을 계산합니다.
+        /// </summary>
+        /// <param name="filePath">파일 경로</param>
+        /// <returns>MD5 해시 문자열</returns>
+        string GetFileMD5Hash(string filePath)
+        {
+            using (var md5 = MD5.Create())
+            {
+                using (var stream = File.OpenRead(filePath))
+                {
+                    byte[] hash = md5.ComputeHash(stream);
+                    return System.BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                }
             }
         }
         

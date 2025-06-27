@@ -334,12 +334,67 @@ namespace RecastNavigation.Editor
         
         void CheckStatus()
         {
-            // 상태 확인 (실제로는 DLL 호출이 필요하지만 여기서는 간단히 표시)
-            isInitialized = false;
-            isNavMeshLoaded = false;
+            Debug.Log("=== CheckStatus 시작 ===");
+            
             statusMessage = "상태 확인 중...";
             
-            // 실제 상태 확인은 DLL이 로드된 후에 가능
+            try
+            {
+                // 1. RecastNavigation 초기화 상태 확인
+                Debug.Log("1. RecastNavigation 초기화 상태 확인...");
+                isInitialized = RecastNavigationWrapper.Initialize();
+                Debug.Log($"초기화 상태: {isInitialized}");
+                
+                if (isInitialized)
+                {
+                    // 2. NavMesh 로드 상태 확인
+                    Debug.Log("2. NavMesh 로드 상태 확인...");
+                    
+                    try
+                    {
+                        int polyCount = RecastNavigationWrapper.GetPolyCount();
+                        int vertCount = RecastNavigationWrapper.GetVertexCount();
+                        
+                        isNavMeshLoaded = (polyCount > 0 || vertCount > 0);
+                        Debug.Log($"NavMesh 로드 상태: {isNavMeshLoaded}");
+                        Debug.Log($"  - 폴리곤 수: {polyCount}");
+                        Debug.Log($"  - 정점 수: {vertCount}");
+                        
+                        if (isNavMeshLoaded)
+                        {
+                            statusMessage = $"준비됨 (폴리곤: {polyCount}, 정점: {vertCount})";
+                        }
+                        else
+                        {
+                            statusMessage = "초기화됨 (NavMesh 없음)";
+                        }
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning($"NavMesh 상태 확인 중 오류: {e.Message}");
+                        isNavMeshLoaded = false;
+                        statusMessage = "초기화됨 (NavMesh 상태 불명)";
+                    }
+                }
+                else
+                {
+                    isNavMeshLoaded = false;
+                    statusMessage = "초기화되지 않음";
+                    Debug.LogWarning("RecastNavigation이 초기화되지 않았습니다.");
+                }
+                
+                Debug.Log($"최종 상태: 초기화={isInitialized}, NavMesh로드={isNavMeshLoaded}");
+                Debug.Log("=== CheckStatus 완료 ===");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"상태 확인 중 오류: {e.Message}");
+                Debug.LogError($"스택 트레이스: {e.StackTrace}");
+                
+                isInitialized = false;
+                isNavMeshLoaded = false;
+                statusMessage = $"상태 확인 오류: {e.Message}";
+            }
         }
         
         void InitializeRecastNavigation()
@@ -368,64 +423,156 @@ namespace RecastNavigation.Editor
         
         void BuildNavMeshWithPreset(NavMeshBuildSettings settings)
         {
+            Debug.Log("=== BuildNavMeshWithPreset 시작 ===");
+            
+            // 1. 초기화 확인
+            Debug.Log("1. RecastNavigation 초기화 확인...");
             if (!RecastNavigationWrapper.Initialize())
             {
                 statusMessage = "RecastNavigation 초기화 실패";
+                Debug.LogError("RecastNavigation 초기화 실패!");
                 return;
             }
+            Debug.Log("RecastNavigation 초기화 성공");
             
-            // 씬의 모든 Mesh 수집
+            // 2. 씬의 모든 Mesh 수집
+            Debug.Log("2. 씬의 Mesh 수집 중...");
             MeshRenderer[] renderers = FindObjectsOfType<MeshRenderer>();
+            Debug.Log($"발견된 MeshRenderer 수: {renderers.Length}");
+            
             if (renderers.Length == 0)
             {
                 statusMessage = "씬에서 Mesh를 찾을 수 없습니다.";
+                Debug.LogWarning("씬에서 MeshRenderer를 찾을 수 없습니다. Mesh가 있는 오브젝트가 있는지 확인하세요.");
                 return;
             }
             
-            // 메시 합치기
+            // 각 렌더러 정보 출력
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                var meshFilter = renderer.GetComponent<MeshFilter>();
+                if (meshFilter != null && meshFilter.sharedMesh != null)
+                {
+                    var mesh = meshFilter.sharedMesh;
+                    Debug.Log($"  - {renderer.name}: {mesh.vertexCount} 정점, {mesh.triangles.Length/3} 삼각형");
+                }
+                else
+                {
+                    Debug.LogWarning($"  - {renderer.name}: MeshFilter 또는 Mesh가 없음");
+                }
+            }
+            
+            // 3. 메시 합치기
+            Debug.Log("3. 메시 합치는 중...");
             Mesh combinedMesh = CombineAllMeshes(renderers);
             
-            // NavMesh 빌드
+            if (combinedMesh == null)
+            {
+                statusMessage = "메시 합치기 실패";
+                Debug.LogError("메시 합치기 실패!");
+                return;
+            }
+            
+            Debug.Log($"합쳐진 메시: {combinedMesh.vertexCount} 정점, {combinedMesh.triangles.Length/3} 삼각형");
+            
+            // 4. NavMesh 빌드
+            Debug.Log("4. NavMesh 빌드 시작...");
+            Debug.Log($"빌드 설정: cellSize={settings.cellSize}, cellHeight={settings.cellHeight}");
+            Debug.Log($"빌드 설정: walkableHeight={settings.walkableHeight}, walkableRadius={settings.walkableRadius}");
+            
             var result = RecastNavigationWrapper.BuildNavMesh(combinedMesh, settings);
             
             if (result.Success)
             {
-                if (RecastNavigationWrapper.LoadNavMesh(result.NavMeshData))
+                Debug.Log($"NavMesh 빌드 성공! 데이터 크기: {result.NavMeshData?.Length ?? 0} 바이트");
+                
+                // 5. NavMesh 로드
+                Debug.Log("5. NavMesh 로드 시도...");
+                if (result.NavMeshData != null && result.NavMeshData.Length > 0)
                 {
-                    isNavMeshLoaded = true;
-                    statusMessage = $"NavMesh 빌드 성공! (프리셋 사용)";
-                    Debug.Log($"NavMesh 빌드 성공! 폴리곤: {RecastNavigationWrapper.GetPolyCount()}, 정점: {RecastNavigationWrapper.GetVertexCount()}");
+                    if (RecastNavigationWrapper.LoadNavMesh(result.NavMeshData))
+                    {
+                        isNavMeshLoaded = true;
+                        int polyCount = RecastNavigationWrapper.GetPolyCount();
+                        int vertCount = RecastNavigationWrapper.GetVertexCount();
+                        
+                        statusMessage = $"NavMesh 빌드 성공! (프리셋 사용)";
+                        Debug.Log($"NavMesh 로드 성공! 폴리곤: {polyCount}, 정점: {vertCount}");
+                        Debug.Log("=== BuildNavMeshWithPreset 완료 ===");
+                    }
+                    else
+                    {
+                        statusMessage = "NavMesh 로드 실패";
+                        Debug.LogError("NavMesh 로드 실패! LoadNavMesh 함수가 false를 반환했습니다.");
+                    }
                 }
                 else
                 {
-                    statusMessage = "NavMesh 로드 실패";
+                    statusMessage = "NavMesh 데이터가 비어있음";
+                    Debug.LogError("NavMesh 빌드는 성공했지만 데이터가 비어있습니다.");
                 }
             }
             else
             {
                 statusMessage = $"NavMesh 빌드 실패: {result.ErrorMessage}";
+                Debug.LogError($"NavMesh 빌드 실패: {result.ErrorMessage}");
             }
         }
         
         void BuildNavMeshFromSelection()
         {
+            Debug.Log("=== BuildNavMeshFromSelection 시작 ===");
+            
+            // 1. 선택된 오브젝트 확인
+            Debug.Log("1. 선택된 오브젝트 확인...");
+            Debug.Log($"selectedObjects.Count: {selectedObjects.Count}");
+            Debug.Log($"Selection.gameObjects.Length: {Selection.gameObjects.Length}");
+            
             if (selectedObjects.Count == 0)
             {
-                EditorUtility.DisplayDialog("오류", "처리할 메시 오브젝트가 선택되지 않았습니다.", "확인");
+                Debug.LogWarning("처리할 메시 오브젝트가 선택되지 않았습니다.");
+                Debug.Log("선택 조건: MeshFilter 또는 MeshRenderer 컴포넌트가 있는 오브젝트");
+                
+                // 현재 선택된 모든 오브젝트 정보 출력
+                var allSelected = Selection.gameObjects;
+                Debug.Log($"현재 선택된 모든 오브젝트 ({allSelected.Length}개):");
+                foreach (var obj in allSelected)
+                {
+                    var meshFilter = obj.GetComponent<MeshFilter>();
+                    var meshRenderer = obj.GetComponent<MeshRenderer>();
+                    Debug.Log($"  - {obj.name}: MeshFilter={meshFilter != null}, MeshRenderer={meshRenderer != null}");
+                }
+                
+                EditorUtility.DisplayDialog("오류", "처리할 메시 오브젝트가 선택되지 않았습니다.\n\nMeshFilter 또는 MeshRenderer 컴포넌트가 있는 오브젝트를 선택해주세요.", "확인");
                 return;
             }
 
+            // 2. RecastNavigationComponent 확인/생성
+            Debug.Log("2. RecastNavigationComponent 확인...");
             RecastNavigationComponent navComponent = FindObjectOfType<RecastNavigationComponent>();
             if (navComponent == null)
             {
+                Debug.Log("RecastNavigationComponent가 없어서 새로 생성합니다.");
                 navComponent = CreateRecastNavigationComponent();
+                if (navComponent == null)
+                {
+                    Debug.LogError("RecastNavigationComponent 생성 실패!");
+                    EditorUtility.DisplayDialog("오류", "RecastNavigationComponent 생성에 실패했습니다.", "확인");
+                    return;
+                }
+            }
+            else
+            {
+                Debug.Log($"기존 RecastNavigationComponent 발견: {navComponent.gameObject.name}");
             }
 
             try
             {
                 EditorUtility.DisplayProgressBar("NavMesh 빌드", "선택된 오브젝트에서 NavMesh 빌드 중...", 0f);
                 
-                // 선택된 오브젝트들의 메시를 합치기
+                // 3. 선택된 오브젝트들의 메시를 합치기
+                Debug.Log("3. 선택된 오브젝트들의 메시 합치는 중...");
                 List<Vector3> allVertices = new List<Vector3>();
                 List<int> allIndices = new List<int>();
 
@@ -436,11 +583,15 @@ namespace RecastNavigation.Editor
                     GameObject obj = selectedObjects[i];
                     MeshFilter meshFilter = obj.GetComponent<MeshFilter>();
                     
+                    Debug.Log($"  처리 중: {obj.name}");
+                    
                     if (meshFilter != null && meshFilter.sharedMesh != null)
                     {
                         Mesh mesh = meshFilter.sharedMesh;
                         Vector3[] vertices = mesh.vertices;
                         int[] indices = mesh.triangles;
+                        
+                        Debug.Log($"    - 메시 정보: {vertices.Length} 정점, {indices.Length/3} 삼각형");
 
                         // 월드 좌표로 변환
                         Transform transform = obj.transform;
@@ -458,36 +609,56 @@ namespace RecastNavigation.Editor
 
                         allVertices.AddRange(vertices);
                         allIndices.AddRange(indices);
+                        
+                        Debug.Log($"    - 누적: {allVertices.Count} 정점, {allIndices.Count/3} 삼각형");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"    - {obj.name}: MeshFilter 또는 Mesh가 없음");
                     }
                 }
+
+                Debug.Log($"최종 합쳐진 메시: {allVertices.Count} 정점, {allIndices.Count/3} 삼각형");
 
                 if (allVertices.Count == 0 || allIndices.Count == 0)
                 {
                     EditorUtility.ClearProgressBar();
-                    EditorUtility.DisplayDialog("오류", "유효한 메시 데이터가 없습니다.", "확인");
+                    Debug.LogError("유효한 메시 데이터가 없습니다!");
+                    EditorUtility.DisplayDialog("오류", "유효한 메시 데이터가 없습니다.\n\n선택된 오브젝트에 유효한 Mesh가 있는지 확인해주세요.", "확인");
                     return;
                 }
 
+                // 4. NavMesh 빌드
+                Debug.Log("4. NavMesh 빌드 시작...");
                 bool success = navComponent.BuildNavMesh(allVertices.ToArray(), allIndices.ToArray());
                 
                 EditorUtility.ClearProgressBar();
                 
                 if (success)
                 {
+                    isNavMeshLoaded = true;
+                    statusMessage = "선택된 오브젝트에서 NavMesh 빌드 성공";
+                    
                     EditorUtility.DisplayDialog("성공", "선택된 오브젝트에서 NavMesh 빌드가 완료되었습니다.", "확인");
                     Debug.Log("선택된 오브젝트에서 NavMesh 빌드 완료!");
+                    Debug.Log("=== BuildNavMeshFromSelection 완료 ===");
                 }
                 else
                 {
-                    EditorUtility.DisplayDialog("오류", "선택된 오브젝트에서 NavMesh 빌드에 실패했습니다.", "확인");
+                    statusMessage = "선택된 오브젝트에서 NavMesh 빌드 실패";
+                    
+                    EditorUtility.DisplayDialog("오류", "선택된 오브젝트에서 NavMesh 빌드에 실패했습니다.\n\nConsole 로그를 확인해주세요.", "확인");
                     Debug.LogError("선택된 오브젝트에서 NavMesh 빌드 실패!");
                 }
             }
             catch (System.Exception e)
             {
                 EditorUtility.ClearProgressBar();
-                EditorUtility.DisplayDialog("오류", $"NavMesh 빌드 중 오류가 발생했습니다: {e.Message}", "확인");
+                statusMessage = $"NavMesh 빌드 중 오류: {e.Message}";
+                
+                EditorUtility.DisplayDialog("오류", $"NavMesh 빌드 중 오류가 발생했습니다:\n\n{e.Message}", "확인");
                 Debug.LogError($"NavMesh 빌드 중 오류: {e.Message}");
+                Debug.LogError($"스택 트레이스: {e.StackTrace}");
             }
         }
         
@@ -534,28 +705,82 @@ namespace RecastNavigation.Editor
         
         void LoadNavMeshFromFile()
         {
+            Debug.Log("=== LoadNavMeshFromFile 시작 ===");
+            
             string filePath = EditorUtility.OpenFilePanel("NavMesh 파일 선택", quickSavePath, "bytes");
             if (!string.IsNullOrEmpty(filePath))
             {
+                Debug.Log($"선택된 파일: {filePath}");
+                
                 try
                 {
+                    // 1. 파일 존재 확인
+                    if (!File.Exists(filePath))
+                    {
+                        statusMessage = "선택된 파일이 존재하지 않음";
+                        Debug.LogError($"파일이 존재하지 않습니다: {filePath}");
+                        return;
+                    }
+                    
+                    // 2. 파일 크기 확인
+                    FileInfo fileInfo = new FileInfo(filePath);
+                    Debug.Log($"파일 크기: {fileInfo.Length} 바이트");
+                    
+                    if (fileInfo.Length == 0)
+                    {
+                        statusMessage = "선택된 파일이 비어있음";
+                        Debug.LogError("선택된 파일이 비어있습니다.");
+                        return;
+                    }
+                    
+                    // 3. 파일 읽기
+                    Debug.Log("파일 데이터 읽는 중...");
                     byte[] data = File.ReadAllBytes(filePath);
+                    Debug.Log($"읽은 데이터 크기: {data.Length} 바이트");
+                    
+                    // 4. RecastNavigation 초기화 확인
+                    if (!RecastNavigationWrapper.Initialize())
+                    {
+                        statusMessage = "RecastNavigation 초기화 실패";
+                        Debug.LogError("RecastNavigation 초기화 실패!");
+                        return;
+                    }
+                    
+                    // 5. NavMesh 로드 시도
+                    Debug.Log("NavMesh 로드 시도...");
                     if (RecastNavigationWrapper.LoadNavMesh(data))
                     {
                         isNavMeshLoaded = true;
+                        
+                        // 로드된 NavMesh 정보 확인
+                        int polyCount = RecastNavigationWrapper.GetPolyCount();
+                        int vertCount = RecastNavigationWrapper.GetVertexCount();
+                        
                         statusMessage = $"NavMesh 로드 성공: {Path.GetFileName(filePath)}";
-                        Debug.Log($"NavMesh 로드 성공: {filePath}");
+                        Debug.Log($"NavMesh 로드 성공!");
+                        Debug.Log($"  - 파일: {filePath}");
+                        Debug.Log($"  - 폴리곤 수: {polyCount}");
+                        Debug.Log($"  - 정점 수: {vertCount}");
+                        Debug.Log("=== LoadNavMeshFromFile 완료 ===");
                     }
                     else
                     {
                         statusMessage = "NavMesh 로드 실패";
-                        Debug.LogError("NavMesh 로드 실패");
+                        Debug.LogError("NavMesh 로드 실패!");
+                        Debug.LogError("LoadNavMesh 함수가 false를 반환했습니다.");
+                        Debug.LogError("파일이 유효한 NavMesh 데이터인지 확인해주세요.");
                     }
                 }
                 catch (System.Exception e)
                 {
+                    statusMessage = $"NavMesh 로드 중 오류: {e.Message}";
                     Debug.LogError($"NavMesh 로드 실패: {e.Message}");
+                    Debug.LogError($"스택 트레이스: {e.StackTrace}");
                 }
+            }
+            else
+            {
+                Debug.Log("파일 선택이 취소되었습니다.");
             }
         }
         
