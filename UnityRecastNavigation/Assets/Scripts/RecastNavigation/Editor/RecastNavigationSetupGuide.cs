@@ -25,6 +25,13 @@ namespace RecastNavigation.Editor
         private string dllPath = "";
         private string scriptsPath = "";
         
+        // EditorPrefs 키
+        private const string PREF_DLL_PATH = "RecastNavigation_DllPath";
+        private const string PREF_SCRIPTS_PATH = "RecastNavigation_ScriptsPath";
+        private const string PREF_AUTO_SETUP = "RecastNavigation_AutoSetup";
+        private const string PREF_COMPLETED_STEPS = "RecastNavigation_CompletedSteps";
+        private const string PREF_CURRENT_STEP = "RecastNavigation_CurrentStep";
+        
         [MenuItem("Tools/RecastNavigation/Setup Guide")]
         public static void ShowWindow()
         {
@@ -34,7 +41,13 @@ namespace RecastNavigation.Editor
         void OnEnable()
         {
             completedSteps = new bool[5];
+            LoadSettings();
             CheckCurrentSetup();
+        }
+        
+        void OnDisable()
+        {
+            SaveSettings();
         }
         
         void OnGUI()
@@ -108,7 +121,25 @@ namespace RecastNavigation.Editor
         void DrawStepByStepGuide()
         {
             EditorGUILayout.Space();
+            EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("단계별 설정 가이드", EditorStyles.boldLabel);
+            
+            // 설정 저장/로드 버튼
+            if (GUILayout.Button("설정 저장", GUILayout.Width(80)))
+            {
+                SaveSettings();
+                ShowNotification(new GUIContent("설정이 저장되었습니다."));
+            }
+            
+            if (GUILayout.Button("설정 초기화", GUILayout.Width(80)))
+            {
+                if (EditorUtility.DisplayDialog("설정 초기화", "모든 설정을 초기화하시겠습니까?", "확인", "취소"))
+                {
+                    ResetAllSettings();
+                    ShowNotification(new GUIContent("설정이 초기화되었습니다."));
+                }
+            }
+            EditorGUILayout.EndHorizontal();
             
             // 단계 1: DLL 파일 복사
             EditorGUILayout.BeginVertical("box");
@@ -118,16 +149,46 @@ namespace RecastNavigation.Editor
             
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("DLL 경로:", GUILayout.Width(80));
-            dllPath = EditorGUILayout.TextField(dllPath);
+            
+            // 툴팁과 함께 텍스트 필드 표시
+            GUIContent dllPathContent = new GUIContent(dllPath, dllPath);
+            dllPath = EditorGUILayout.TextField(dllPathContent, dllPath);
             if (GUILayout.Button("찾아보기", GUILayout.Width(60)))
             {
-                string path = EditorUtility.OpenFilePanel("DLL 파일 선택", "", "dll");
+                string path = EditorUtility.OpenFilePanel("DLL 파일 선택", string.IsNullOrEmpty(dllPath) ? "" : Path.GetDirectoryName(dllPath), "dll");
                 if (!string.IsNullOrEmpty(path))
                 {
                     dllPath = path;
+                    SaveSettings(); // 즉시 저장
+                    Repaint(); // UI 강제 업데이트
+                    Debug.Log($"DLL 경로 선택됨: {dllPath}");
                 }
             }
             EditorGUILayout.EndHorizontal();
+            
+            // 선택된 경로 표시 및 유효성 확인
+            if (!string.IsNullOrEmpty(dllPath))
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("선택된 파일:", GUILayout.Width(80));
+                
+                string displayPath = dllPath.Length > 50 ? "..." + dllPath.Substring(dllPath.Length - 47) : dllPath;
+                GUIContent pathContent = new GUIContent(displayPath, dllPath);
+                
+                // 파일 존재 여부에 따라 색상 변경
+                bool fileExists = File.Exists(dllPath);
+                GUI.color = fileExists ? Color.white : Color.red;
+                EditorGUILayout.SelectableLabel(pathContent.text, EditorStyles.textField, GUILayout.Height(16));
+                GUI.color = Color.white;
+                
+                // 상태 아이콘
+                string statusIcon = fileExists ? "✓" : "✗";
+                GUI.color = fileExists ? Color.green : Color.red;
+                EditorGUILayout.LabelField(statusIcon, GUILayout.Width(20));
+                GUI.color = Color.white;
+                
+                EditorGUILayout.EndHorizontal();
+            }
             
             if (GUILayout.Button("DLL 복사 및 확인"))
             {
@@ -144,16 +205,46 @@ namespace RecastNavigation.Editor
             
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("스크립트 경로:", GUILayout.Width(80));
-            scriptsPath = EditorGUILayout.TextField(scriptsPath);
+            
+            // 툴팁과 함께 텍스트 필드 표시
+            GUIContent scriptsPathContent = new GUIContent(scriptsPath, scriptsPath);
+            scriptsPath = EditorGUILayout.TextField(scriptsPathContent, scriptsPath);
             if (GUILayout.Button("찾아보기", GUILayout.Width(60)))
             {
-                string path = EditorUtility.OpenFolderPanel("스크립트 폴더 선택", "", "");
+                string path = EditorUtility.OpenFolderPanel("스크립트 폴더 선택", string.IsNullOrEmpty(scriptsPath) ? "" : scriptsPath, "");
                 if (!string.IsNullOrEmpty(path))
                 {
                     scriptsPath = path;
+                    SaveSettings(); // 즉시 저장
+                    Repaint(); // UI 강제 업데이트
+                    Debug.Log($"스크립트 경로 선택됨: {scriptsPath}");
                 }
             }
             EditorGUILayout.EndHorizontal();
+            
+            // 선택된 경로 표시 및 유효성 확인
+            if (!string.IsNullOrEmpty(scriptsPath))
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("선택된 폴더:", GUILayout.Width(80));
+                
+                string displayPath = scriptsPath.Length > 50 ? "..." + scriptsPath.Substring(scriptsPath.Length - 47) : scriptsPath;
+                GUIContent pathContent = new GUIContent(displayPath, scriptsPath);
+                
+                // 폴더 존재 여부에 따라 색상 변경
+                bool folderExists = Directory.Exists(scriptsPath);
+                GUI.color = folderExists ? Color.white : Color.red;
+                EditorGUILayout.SelectableLabel(pathContent.text, EditorStyles.textField, GUILayout.Height(16));
+                GUI.color = Color.white;
+                
+                // 상태 아이콘
+                string statusIcon = folderExists ? "✓" : "✗";
+                GUI.color = folderExists ? Color.green : Color.red;
+                EditorGUILayout.LabelField(statusIcon, GUILayout.Width(20));
+                GUI.color = Color.white;
+                
+                EditorGUILayout.EndHorizontal();
+            }
             
             if (GUILayout.Button("스크립트 임포트 및 확인"))
             {
@@ -252,6 +343,15 @@ namespace RecastNavigation.Editor
                 CheckErrorLogs();
             }
             
+            if (GUILayout.Button("설정 정보"))
+            {
+                ShowSettingsInfo();
+            }
+            
+            EditorGUILayout.EndHorizontal();
+            
+            EditorGUILayout.BeginHorizontal();
+            
             if (GUILayout.Button("설정 초기화"))
             {
                 ResetSetup();
@@ -329,6 +429,7 @@ namespace RecastNavigation.Editor
                 
                 dllCopied = true;
                 completedSteps[0] = true;
+                SaveSettings(); // 설정 자동 저장
                 
                 EditorUtility.DisplayDialog("성공", "DLL이 성공적으로 복사되었습니다.", "확인");
                 Debug.Log($"DLL 복사 완료: {destPath}");
@@ -385,6 +486,7 @@ namespace RecastNavigation.Editor
                 
                 scriptsImported = true;
                 completedSteps[1] = true;
+                SaveSettings(); // 설정 자동 저장
                 
                 EditorUtility.DisplayDialog("성공", "스크립트가 성공적으로 임포트되었습니다.", "확인");
                 Debug.Log($"스크립트 임포트 완료: {destScriptsPath}");
@@ -438,6 +540,7 @@ namespace RecastNavigation.Editor
                 {
                     navMeshBuilt = true;
                     completedSteps[2] = true;
+                    SaveSettings(); // 설정 자동 저장
                     
                     EditorUtility.DisplayDialog("성공", "NavMesh 빌드 테스트 성공!", "확인");
                     Debug.Log("NavMesh 빌드 테스트 성공");
@@ -474,6 +577,7 @@ namespace RecastNavigation.Editor
                 {
                     pathfindingTested = true;
                     completedSteps[3] = true;
+                    SaveSettings(); // 설정 자동 저장
                     
                     string pathInfo = result.PathPoints != null ? $"포인트 수: {result.PathPoints.Length}" : "경로 포인트: null (테스트 모드)";
                     
@@ -497,6 +601,7 @@ namespace RecastNavigation.Editor
             if (completedSteps[0] && completedSteps[1] && completedSteps[2] && completedSteps[3])
             {
                 completedSteps[4] = true;
+                SaveSettings(); // 설정 자동 저장
                 
                 EditorUtility.DisplayDialog("축하합니다!", "RecastNavigation 설정이 완료되었습니다!\n\n이제 Tools > RecastNavigation 메뉴에서 에디터 도구를 사용할 수 있습니다.", "확인");
                 Debug.Log("RecastNavigation 설정 완료!");
@@ -622,5 +727,139 @@ namespace RecastNavigation.Editor
             
             return mesh;
         }
+        
+        #region 설정 저장/로드
+        
+        /// <summary>
+        /// 설정을 저장합니다
+        /// </summary>
+        void SaveSettings()
+        {
+            try
+            {
+                // 경로 설정 저장
+                EditorPrefs.SetString(PREF_DLL_PATH, dllPath ?? "");
+                EditorPrefs.SetString(PREF_SCRIPTS_PATH, scriptsPath ?? "");
+                EditorPrefs.SetBool(PREF_AUTO_SETUP, autoSetup);
+                EditorPrefs.SetInt(PREF_CURRENT_STEP, currentStep);
+                
+                // 완료된 단계들 저장 (비트마스크로 저장)
+                int completedStepsMask = 0;
+                for (int i = 0; i < completedSteps.Length; i++)
+                {
+                    if (completedSteps[i])
+                    {
+                        completedStepsMask |= (1 << i);
+                    }
+                }
+                EditorPrefs.SetInt(PREF_COMPLETED_STEPS, completedStepsMask);
+                
+                Debug.Log("RecastNavigation 설정이 저장되었습니다.");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"설정 저장 실패: {e.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// 설정을 로드합니다
+        /// </summary>
+        void LoadSettings()
+        {
+            try
+            {
+                // 경로 설정 로드
+                dllPath = EditorPrefs.GetString(PREF_DLL_PATH, "");
+                scriptsPath = EditorPrefs.GetString(PREF_SCRIPTS_PATH, "");
+                autoSetup = EditorPrefs.GetBool(PREF_AUTO_SETUP, false);
+                currentStep = EditorPrefs.GetInt(PREF_CURRENT_STEP, 0);
+                
+                // 완료된 단계들 로드 (비트마스크에서 복원)
+                int completedStepsMask = EditorPrefs.GetInt(PREF_COMPLETED_STEPS, 0);
+                for (int i = 0; i < completedSteps.Length; i++)
+                {
+                    completedSteps[i] = (completedStepsMask & (1 << i)) != 0;
+                }
+                
+                // 상태 변수들 업데이트
+                dllCopied = completedSteps[0];
+                scriptsImported = completedSteps[1];
+                navMeshBuilt = completedSteps[2];
+                pathfindingTested = completedSteps[3];
+                
+                Debug.Log("RecastNavigation 설정이 로드되었습니다.");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"설정 로드 실패: {e.Message}");
+                // 실패 시 기본값으로 초기화
+                ResetAllSettings();
+            }
+        }
+        
+        /// <summary>
+        /// 모든 설정을 초기화합니다
+        /// </summary>
+        void ResetAllSettings()
+        {
+            try
+            {
+                // EditorPrefs에서 설정 삭제
+                EditorPrefs.DeleteKey(PREF_DLL_PATH);
+                EditorPrefs.DeleteKey(PREF_SCRIPTS_PATH);
+                EditorPrefs.DeleteKey(PREF_AUTO_SETUP);
+                EditorPrefs.DeleteKey(PREF_COMPLETED_STEPS);
+                EditorPrefs.DeleteKey(PREF_CURRENT_STEP);
+                
+                // 변수들 초기화
+                dllPath = "";
+                scriptsPath = "";
+                autoSetup = false;
+                currentStep = 0;
+                
+                dllCopied = false;
+                scriptsImported = false;
+                navMeshBuilt = false;
+                pathfindingTested = false;
+                
+                for (int i = 0; i < completedSteps.Length; i++)
+                {
+                    completedSteps[i] = false;
+                }
+                
+                Debug.Log("RecastNavigation 설정이 초기화되었습니다.");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"설정 초기화 실패: {e.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// 설정 정보를 표시합니다
+        /// </summary>
+        void ShowSettingsInfo()
+        {
+            string info = $"=== RecastNavigation 설정 정보 ===\n";
+            info += $"DLL 경로: {dllPath}\n";
+            info += $"스크립트 경로: {scriptsPath}\n";
+            info += $"자동 설정: {autoSetup}\n";
+            info += $"현재 단계: {currentStep}\n";
+            info += $"완료된 단계: ";
+            
+            for (int i = 0; i < completedSteps.Length; i++)
+            {
+                if (completedSteps[i])
+                {
+                    info += $"{i + 1} ";
+                }
+            }
+            
+            Debug.Log(info);
+            EditorUtility.DisplayDialog("설정 정보", info, "확인");
+        }
+        
+        #endregion
     }
 } 

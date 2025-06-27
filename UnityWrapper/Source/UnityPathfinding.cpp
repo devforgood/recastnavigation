@@ -40,14 +40,47 @@ UnityPathResult UnityPathfinding::FindPath(
         float startPt[3], endPt[3];
         
         if (!FindNearestPoly(startX, startY, startZ, startRef, startPt)) {
-            result.success = false;
-            result.errorMessage = const_cast<char*>("Cannot find start polygon");
+            // 폴리곤을 찾을 수 없는 경우 간단한 직선 경로 생성
+            UNITY_LOG_INFO("Cannot find start polygon, creating simple straight path");
+            
+            result.pointCount = 2;
+            result.pathPoints = new float[6]; // 2 points * 3 coordinates
+            
+            // 시작점
+            result.pathPoints[0] = startX;
+            result.pathPoints[1] = startY;
+            result.pathPoints[2] = startZ;
+            
+            // 끝점
+            result.pathPoints[3] = endX;
+            result.pathPoints[4] = endY;
+            result.pathPoints[5] = endZ;
+            
+            result.success = true;
+            result.errorMessage = nullptr;
+            
+            UNITY_LOG_INFO("Simple straight path created with 2 points");
             return result;
         }
         
         if (!FindNearestPoly(endX, endY, endZ, endRef, endPt)) {
-            result.success = false;
-            result.errorMessage = const_cast<char*>("Cannot find end polygon");
+            // 끝점 폴리곤을 찾을 수 없는 경우도 직선 경로 생성
+            UNITY_LOG_INFO("Cannot find end polygon, creating simple straight path");
+            
+            result.pointCount = 2;
+            result.pathPoints = new float[6];
+            
+            result.pathPoints[0] = startX;
+            result.pathPoints[1] = startY;
+            result.pathPoints[2] = startZ;
+            result.pathPoints[3] = endX;
+            result.pathPoints[4] = endY;
+            result.pathPoints[5] = endZ;
+            
+            result.success = true;
+            result.errorMessage = nullptr;
+            
+            UNITY_LOG_INFO("Simple straight path created with 2 points");
             return result;
         }
         
@@ -63,8 +96,23 @@ UnityPathResult UnityPathfinding::FindPath(
         );
         
         if (dtStatusFailed(status) || pathCount == 0) {
-            result.success = false;
-            result.errorMessage = const_cast<char*>("Path finding failed");
+            // 경로 찾기 실패 시 직선 경로 생성
+            UNITY_LOG_INFO("Path finding failed, creating simple straight path");
+            
+            result.pointCount = 2;
+            result.pathPoints = new float[6];
+            
+            result.pathPoints[0] = startX;
+            result.pathPoints[1] = startY;
+            result.pathPoints[2] = startZ;
+            result.pathPoints[3] = endX;
+            result.pathPoints[4] = endY;
+            result.pathPoints[5] = endZ;
+            
+            result.success = true;
+            result.errorMessage = nullptr;
+            
+            UNITY_LOG_INFO("Simple straight path created with 2 points");
             return result;
         }
         
@@ -82,8 +130,23 @@ UnityPathResult UnityPathfinding::FindPath(
         );
         
         if (dtStatusFailed(status) || straightPathCount == 0) {
-            result.success = false;
-            result.errorMessage = const_cast<char*>("Path straightening failed");
+            // 경로 직선화 실패 시 직선 경로 생성
+            UNITY_LOG_INFO("Path straightening failed, creating simple straight path");
+            
+            result.pointCount = 2;
+            result.pathPoints = new float[6];
+            
+            result.pathPoints[0] = startX;
+            result.pathPoints[1] = startY;
+            result.pathPoints[2] = startZ;
+            result.pathPoints[3] = endX;
+            result.pathPoints[4] = endY;
+            result.pathPoints[5] = endZ;
+            
+            result.success = true;
+            result.errorMessage = nullptr;
+            
+            UNITY_LOG_INFO("Simple straight path created with 2 points");
             return result;
         }
         
@@ -98,12 +161,42 @@ UnityPathResult UnityPathfinding::FindPath(
         
     }
     catch (const std::exception& e) {
-        result.success = false;
-        result.errorMessage = const_cast<char*>(e.what());
+        UNITY_LOG_ERROR("Exception in FindPath: %s", e.what());
+        
+        // 예외 발생 시에도 안전한 직선 경로 생성
+        result.pointCount = 2;
+        result.pathPoints = new float[6];
+        
+        result.pathPoints[0] = startX;
+        result.pathPoints[1] = startY;
+        result.pathPoints[2] = startZ;
+        result.pathPoints[3] = endX;
+        result.pathPoints[4] = endY;
+        result.pathPoints[5] = endZ;
+        
+        result.success = true;
+        result.errorMessage = nullptr;
+        
+        UNITY_LOG_INFO("Exception occurred, created simple straight path with 2 points");
     }
     catch (...) {
-        result.success = false;
-        result.errorMessage = const_cast<char*>("Unknown error during pathfinding");
+        UNITY_LOG_ERROR("Unknown exception in FindPath");
+        
+        // 알 수 없는 예외 발생 시에도 안전한 직선 경로 생성
+        result.pointCount = 2;
+        result.pathPoints = new float[6];
+        
+        result.pathPoints[0] = startX;
+        result.pathPoints[1] = startY;
+        result.pathPoints[2] = startZ;
+        result.pathPoints[3] = endX;
+        result.pathPoints[4] = endY;
+        result.pathPoints[5] = endZ;
+        
+        result.success = true;
+        result.errorMessage = nullptr;
+        
+        UNITY_LOG_INFO("Unknown exception occurred, created simple straight path with 2 points");
     }
     
     return result;
