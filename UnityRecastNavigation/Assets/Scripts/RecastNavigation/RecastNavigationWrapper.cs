@@ -35,7 +35,7 @@ namespace RecastNavigation
         public int vertexCount;      // 정점 개수
         public int indexCount;       // 인덱스 개수
         [MarshalAs(UnmanagedType.Bool)]
-        public bool autoTransform;   // 자동 좌표 변환 여부
+        public bool transformCoordinates; // 좌표 변환 여부
     }
 
     /// <summary>
@@ -55,8 +55,10 @@ namespace RecastNavigation
         public int maxVertsPerPoly;      // 폴리곤당 최대 정점 수
         public float detailSampleDist;   // 상세 샘플링 거리
         public float detailSampleMaxError; // 상세 샘플링 최대 오차
+        public float maxSimplificationError; // 최대 단순화 오차
+        public float maxEdgeLen;         // 최대 엣지 길이
         [MarshalAs(UnmanagedType.Bool)]
-        public bool autoTransform;       // 자동 좌표 변환 여부
+        public bool autoTransformCoordinates; // 자동 좌표 변환
     }
 
     /// <summary>
@@ -90,7 +92,10 @@ namespace RecastNavigation
     /// </summary>
     public static class RecastNavigationWrapper
     {
-        private const string DLL_NAME = "UnityRecastWrapper";
+        private const string DLL_NAME = "UnityWrapper";
+        
+        // DLL 사용 가능 여부 캐싱
+        private static bool? _isDLLAvailable = null;
 
         #region DLL Import 함수들
 
@@ -178,11 +183,64 @@ namespace RecastNavigation
         {
             try
             {
+                // DLL 로딩 가능 여부 확인
+                if (!IsDLLAvailable())
+                {
+                    Debug.LogError($"RecastNavigation DLL을 찾을 수 없습니다. '{DLL_NAME}'가 Assets/Plugins 폴더에 있는지 확인하세요.");
+                    return false;
+                }
+                
                 return UnityRecast_Initialize();
             }
             catch (Exception e)
             {
                 Debug.LogError($"RecastNavigation 초기화 실패: {e.Message}");
+                Debug.LogError($"DLL 경로: {DLL_NAME}");
+                Debug.LogError("가능한 해결 방법:");
+                Debug.LogError("1. DLL 파일이 Assets/Plugins 폴더에 있는지 확인");
+                Debug.LogError("2. DLL이 현재 플랫폼에 맞게 설정되어 있는지 확인");
+                Debug.LogError("3. Visual C++ Redistributable이 설치되어 있는지 확인");
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// DLL 사용 가능 여부 확인
+        /// </summary>
+        private static bool IsDLLAvailable()
+        {
+            if (_isDLLAvailable.HasValue)
+                return _isDLLAvailable.Value;
+                
+            try
+            {
+                // 간단한 함수 호출로 DLL 로딩 테스트
+                UnityRecast_IsInitialized();
+                _isDLLAvailable = true;
+                return true;
+            }
+            catch (System.DllNotFoundException)
+            {
+                Debug.LogError($"DLL '{DLL_NAME}'을 찾을 수 없습니다. Assets/Plugins 폴더를 확인하세요.");
+                _isDLLAvailable = false;
+                return false;
+            }
+            catch (System.BadImageFormatException)
+            {
+                Debug.LogError($"DLL '{DLL_NAME}'이 현재 플랫폼과 호환되지 않습니다. x64 빌드용 DLL인지 확인하세요.");
+                _isDLLAvailable = false;
+                return false;
+            }
+            catch (System.EntryPointNotFoundException e)
+            {
+                Debug.LogError($"DLL '{DLL_NAME}'에서 함수를 찾을 수 없습니다: {e.Message}");
+                _isDLLAvailable = false;
+                return false;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"DLL '{DLL_NAME}' 로딩 실패: {e.Message}");
+                _isDLLAvailable = false;
                 return false;
             }
         }

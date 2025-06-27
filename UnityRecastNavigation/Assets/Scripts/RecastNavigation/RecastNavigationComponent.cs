@@ -393,7 +393,7 @@ namespace RecastNavigation
                 {
                     vertexCount = vertices.Length,
                     indexCount = indices.Length,
-                    autoTransform = false // 이미 변환됨
+                    transformCoordinates = false // 이미 변환됨
                 };
 
                 // 정점 데이터 변환
@@ -428,7 +428,9 @@ namespace RecastNavigation
                         maxVertsPerPoly = buildSettings.maxVertsPerPoly,
                         detailSampleDist = buildSettings.detailSampleDist,
                         detailSampleMaxError = buildSettings.detailSampleMaxError,
-                        autoTransform = false // 이미 변환됨
+                        maxSimplificationError = 1.3f, // 기본값
+                        maxEdgeLen = 12.0f, // 기본값
+                        autoTransformCoordinates = false // 이미 변환됨
                     };
 
                     // NavMesh 빌드
