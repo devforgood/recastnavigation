@@ -106,8 +106,9 @@ namespace RecastNavigation
         [DllImport(DLL_NAME)]
         public static extern void UnityRecast_Cleanup();
 
-        [DllImport(DLL_NAME)]
-        public static extern bool UnityRecast_IsInitialized();
+        // 주석처리: C++ 코드에 구현되지 않음
+        // [DllImport(DLL_NAME)]
+        // public static extern bool UnityRecast_IsInitialized();
 
         // 좌표계 설정
         [DllImport(DLL_NAME)]
@@ -214,8 +215,8 @@ namespace RecastNavigation
                 
             try
             {
-                // 간단한 함수 호출로 DLL 로딩 테스트
-                UnityRecast_IsInitialized();
+                // 간단한 함수 호출로 DLL 로딩 테스트 (확실히 존재하는 함수 사용)
+                UnityRecast_GetCoordinateSystem();
                 _isDLLAvailable = true;
                 return true;
             }
@@ -305,7 +306,7 @@ namespace RecastNavigation
                 {
                     vertexCount = vertices.Length,
                     indexCount = indices.Length,
-                    autoTransform = false // 이미 변환됨
+                    transformCoordinates = false // 이미 변환됨
                 };
 
                 // 정점 데이터 마샬링
@@ -340,7 +341,9 @@ namespace RecastNavigation
                     maxVertsPerPoly = settings.maxVertsPerPoly,
                     detailSampleDist = settings.detailSampleDist,
                     detailSampleMaxError = settings.detailSampleMaxError,
-                    autoTransform = false
+                    maxSimplificationError = 1.3f, // 기본값
+                    maxEdgeLen = 12.0f, // 기본값
+                    autoTransformCoordinates = false
                 };
 
                 UnityNavMeshResult result = UnityRecast_BuildNavMesh(ref meshData, ref buildSettings);
@@ -414,7 +417,7 @@ namespace RecastNavigation
                     return new PathfindingResult
                     {
                         Success = true,
-                        PathPoints = pathPoints
+                        PathPoints = pathPoints ?? new Vector3[0] // null 대신 빈 배열 반환
                     };
                 }
                 else

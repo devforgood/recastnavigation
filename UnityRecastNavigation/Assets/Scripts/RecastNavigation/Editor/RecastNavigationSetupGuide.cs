@@ -475,8 +475,10 @@ namespace RecastNavigation.Editor
                     pathfindingTested = true;
                     completedSteps[3] = true;
                     
+                    string pathInfo = result.PathPoints != null ? $"포인트 수: {result.PathPoints.Length}" : "경로 포인트: null (테스트 모드)";
+                    
                     EditorUtility.DisplayDialog("성공", "경로 찾기 테스트 성공!", "확인");
-                    Debug.Log($"경로 찾기 테스트 성공! 포인트 수: {result.PathPoints.Length}");
+                    Debug.Log($"경로 찾기 테스트 성공! {pathInfo}");
                 }
                 else
                 {
