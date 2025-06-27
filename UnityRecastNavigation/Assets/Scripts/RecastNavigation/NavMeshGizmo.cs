@@ -47,6 +47,9 @@ namespace RecastNavigation
         [SerializeField] private bool showInfoOnHover = true;
         [SerializeField] private bool enableClickToEdit = false;
         
+        [Header("면 색상")]
+        [SerializeField] private Color faceColor = new Color(0.2f, 0.8f, 0.2f, 0.3f);
+        
         private NavMeshDebugData debugData;
         private List<Vector3> vertices = new List<Vector3>();
         private List<int> indices = new List<int>();
@@ -64,12 +67,45 @@ namespace RecastNavigation
         private int animatedPathIndex = 0;
         
         // 인터랙션
-        private Vector3 hoveredPoint;
+        public Vector3 hoveredPoint;
         private bool isHovering = false;
         private Camera sceneCamera;
         
         private float lastUpdateTime;
         private bool hasValidData = false;
+        
+        #region 공개 속성들 (Editor에서 사용)
+        
+        /// <summary>
+        /// NavMesh가 로드되어 있는지 여부
+        /// </summary>
+        public bool IsNavMeshLoaded => hasValidData;
+        
+        /// <summary>
+        /// 폴리곤 개수
+        /// </summary>
+        public int PolyCount => debugData.TriangleCount;
+        
+        /// <summary>
+        /// 정점 개수
+        /// </summary>
+        public int VertexCount => vertices.Count;
+        
+        /// <summary>
+        /// 경로 포인트 개수
+        /// </summary>
+        public int PathPointCount => currentPath.Count;
+        
+        /// <summary>
+        /// 클릭 편집 활성화 여부
+        /// </summary>
+        public bool EnableClickToEdit 
+        { 
+            get => enableClickToEdit; 
+            set => enableClickToEdit = value; 
+        }
+        
+        #endregion
         
         private void Start()
         {

@@ -123,7 +123,7 @@ namespace RecastNavigation.Editor
         {
             NavMeshGizmo gizmo = (NavMeshGizmo)target;
             
-            if (!gizmo.enableClickToEdit) return;
+            if (!gizmo.EnableClickToEdit) return;
 
             Event e = Event.current;
             if (e.type == EventType.MouseDown && e.button == 0)
