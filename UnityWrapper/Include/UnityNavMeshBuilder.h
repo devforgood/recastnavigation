@@ -57,6 +57,7 @@ private:
     // NavMesh 빌드 과정
     bool BuildHeightfield(const UnityMeshData* meshData, const UnityNavMeshBuildSettings* settings);
     bool BuildCompactHeightfield(const UnityNavMeshBuildSettings* settings);
+    bool BuildRegions(const UnityNavMeshBuildSettings* settings);
     bool BuildContourSet(const UnityNavMeshBuildSettings* settings);
     bool BuildPolyMesh(const UnityNavMeshBuildSettings* settings);
     bool BuildDetailMesh(const UnityNavMeshBuildSettings* settings);

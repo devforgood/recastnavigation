@@ -88,44 +88,53 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
         }
         UNITY_LOG_INFO("2. BuildCompactHeightfield success");
         
-        UNITY_LOG_INFO("3. BuildContourSet starting...");
+        UNITY_LOG_INFO("3. BuildRegions starting...");
+        if (!BuildRegions(settings)) {
+            UNITY_LOG_ERROR("BuildNavMesh: BuildRegions failed");
+            result.success = false;
+            result.errorMessage = const_cast<char*>("Failed to build regions");
+            return result;
+        }
+        UNITY_LOG_INFO("3. BuildRegions success");
+        
+        UNITY_LOG_INFO("4. BuildContourSet starting...");
         if (!BuildContourSet(settings)) {
             UNITY_LOG_ERROR("BuildNavMesh: BuildContourSet failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build contour set");
             return result;
         }
-        UNITY_LOG_INFO("3. BuildContourSet success");
+        UNITY_LOG_INFO("4. BuildContourSet success");
         
-        UNITY_LOG_INFO("4. BuildPolyMesh starting...");
+        UNITY_LOG_INFO("5. BuildPolyMesh starting...");
         if (!BuildPolyMesh(settings)) {
             UNITY_LOG_ERROR("BuildNavMesh: BuildPolyMesh failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build poly mesh");
             return result;
         }
-        UNITY_LOG_INFO("4. BuildPolyMesh success");
+        UNITY_LOG_INFO("5. BuildPolyMesh success");
         
-        UNITY_LOG_INFO("5. BuildDetailMesh starting...");
+        UNITY_LOG_INFO("6. BuildDetailMesh starting...");
         if (!BuildDetailMesh(settings)) {
             UNITY_LOG_ERROR("BuildNavMesh: BuildDetailMesh failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build detail mesh");
             return result;
         }
-        UNITY_LOG_INFO("5. BuildDetailMesh success");
+        UNITY_LOG_INFO("6. BuildDetailMesh success");
         
-        UNITY_LOG_INFO("6. BuildDetourNavMesh starting...");
+        UNITY_LOG_INFO("7. BuildDetourNavMesh starting...");
         if (!BuildDetourNavMesh(settings)) {
             UNITY_LOG_ERROR("BuildNavMesh: BuildDetourNavMesh failed");
             result.success = false;
             result.errorMessage = const_cast<char*>("Failed to build detour nav mesh");
             return result;
         }
-        UNITY_LOG_INFO("6. BuildDetourNavMesh success");
+        UNITY_LOG_INFO("7. BuildDetourNavMesh success");
         
         // NavMesh 데이터 직렬화
-        UNITY_LOG_INFO("7. NavMesh data serialization starting...");
+        UNITY_LOG_INFO("8. NavMesh data serialization starting...");
         unsigned char* navData = nullptr;
         int navDataSize = 0;
         
@@ -413,9 +422,17 @@ bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSetting
     
     m_chf = std::make_unique<rcCompactHeightfield>();
     
+    // Convert from world units to cell units for Recast
+    int walkableHeightCells = static_cast<int>(settings->walkableHeight / settings->cellHeight);
+    int walkableClimbCells = static_cast<int>(settings->walkableClimb / settings->cellHeight);
+    
     UNITY_LOG_INFO("  rcBuildCompactHeightfield calling...");
-    if (!rcBuildCompactHeightfield(m_ctx.get(), static_cast<int>(settings->walkableHeight), 
-                                  static_cast<int>(settings->walkableClimb), *m_solid, *m_chf)) {
+    UNITY_LOG_INFO("  Original values: walkableHeight=%.3f, walkableClimb=%.3f, cellHeight=%.3f", 
+                   settings->walkableHeight, settings->walkableClimb, settings->cellHeight);
+    UNITY_LOG_INFO("  Converted to cells: walkableHeight=%d, walkableClimb=%d", 
+                   walkableHeightCells, walkableClimbCells);
+                   
+    if (!rcBuildCompactHeightfield(m_ctx.get(), walkableHeightCells, walkableClimbCells, *m_solid, *m_chf)) {
         UNITY_LOG_ERROR("  ERROR: rcBuildCompactHeightfield failed");
         return false;
     }
@@ -425,20 +442,32 @@ bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSetting
     UNITY_LOG_INFO("  === CompactHeightfield data check ===");
     UNITY_LOG_INFO("  CompactHeightfield: width=%d, height=%d", m_chf->width, m_chf->height);
     UNITY_LOG_INFO("  CompactHeightfield: spanCount=%d", m_chf->spanCount);
-    UNITY_LOG_INFO("  CompactHeightfield: walkableHeight=%d", static_cast<int>(settings->walkableHeight));
-    UNITY_LOG_INFO("  CompactHeightfield: walkableClimb=%d", static_cast<int>(settings->walkableClimb));
+    UNITY_LOG_INFO("  CompactHeightfield: walkableHeight=%d cells", walkableHeightCells);
+    UNITY_LOG_INFO("  CompactHeightfield: walkableClimb=%d cells", walkableClimbCells);
     
-    // walkable한 span 개수 세기
+    // walkable한 span 개수 세기 (region과 무관하게)
     int walkableSpans = 0;
+    int totalSpans = 0;
     for (int i = 0; i < m_chf->width * m_chf->height; ++i) {
         const rcCompactCell& c = m_chf->cells[i];
         for (int j = 0; j < c.count; ++j) {
+            totalSpans++;
             const rcCompactSpan& s = m_chf->spans[c.index + j];
-            if (s.reg != RC_NULL_AREA) {
-                walkableSpans++;
+            
+            // walkable 조건: area가 RC_WALKABLE_AREA이고 높이가 충분한 경우
+            if (m_chf->areas[c.index + j] == RC_WALKABLE_AREA) {
+                // 추가 높이 검사: 다음 span과의 거리가 walkableHeight 이상인지 확인
+                int spanTop = (int)s.y;
+                int nextSpanBottom = (j + 1 < c.count) ? (int)m_chf->spans[c.index + j + 1].y : 0xffff;
+                int clearHeight = nextSpanBottom - spanTop;
+                
+                if (clearHeight >= walkableHeightCells) {
+                    walkableSpans++;
+                }
             }
         }
     }
+    UNITY_LOG_INFO("  Total spans: %d", totalSpans);
     UNITY_LOG_INFO("  Walkable spans: %d", walkableSpans);
     
     if (walkableSpans == 0) {
@@ -450,6 +479,54 @@ bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSetting
     CreateSimplePolyMesh(settings);
     UNITY_LOG_INFO("  CreateSimplePolyMesh success");
     
+    return true;
+}
+
+bool UnityNavMeshBuilder::BuildRegions(const UnityNavMeshBuildSettings* settings) {
+    UNITY_LOG_INFO("  BuildRegions: start");
+    
+    // Convert from world units to cell units for Recast
+    int walkableRadiusCells = static_cast<int>(settings->walkableRadius / settings->cellSize);
+    
+    UNITY_LOG_INFO("  rcErodeWalkableArea calling...");
+    UNITY_LOG_INFO("  walkableRadius=%.3f, cellSize=%.3f, walkableRadiusCells=%d", 
+                   settings->walkableRadius, settings->cellSize, walkableRadiusCells);
+    
+    if (!rcErodeWalkableArea(m_ctx.get(), walkableRadiusCells, *m_chf)) {
+        UNITY_LOG_ERROR("  ERROR: rcErodeWalkableArea failed");
+        return false;
+    }
+    UNITY_LOG_INFO("  rcErodeWalkableArea success");
+    
+    UNITY_LOG_INFO("  rcBuildDistanceField calling...");
+    if (!rcBuildDistanceField(m_ctx.get(), *m_chf)) {
+        UNITY_LOG_ERROR("  ERROR: rcBuildDistanceField failed");
+        return false;
+    }
+    UNITY_LOG_INFO("  rcBuildDistanceField success");
+    
+    UNITY_LOG_INFO("  rcBuildRegions calling...");
+    UNITY_LOG_INFO("  minRegionArea=%.1f, mergeRegionArea=%.1f", 
+                   settings->minRegionArea, settings->mergeRegionArea);
+    
+    if (!rcBuildRegions(m_ctx.get(), *m_chf, 0, 
+                       static_cast<int>(settings->minRegionArea), 
+                       static_cast<int>(settings->mergeRegionArea))) {
+        UNITY_LOG_ERROR("  ERROR: rcBuildRegions failed");
+        return false;
+    }
+    UNITY_LOG_INFO("  rcBuildRegions success");
+    
+    // Region 생성 결과 확인
+    int regionCount = 0;
+    for (int i = 0; i < m_chf->spanCount; ++i) {
+        if (m_chf->spans[i].reg != RC_NULL_AREA) {
+            regionCount++;
+        }
+    }
+    UNITY_LOG_INFO("  Regions created: %d spans assigned to regions", regionCount);
+    
+    UNITY_LOG_INFO("  BuildRegions: completed");
     return true;
 }
 
