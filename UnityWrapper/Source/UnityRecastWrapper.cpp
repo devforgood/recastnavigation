@@ -449,26 +449,128 @@ UNITY_API int UnityRecast_GetVertexCount() {
     return vertexCount;
 }
 
-// 디버그 기능들 (향후 구현)
+// 디버그 기능들 (완전 구현)
 UNITY_API void UnityRecast_SetDebugDraw(bool enabled) {
-    (void)enabled; // 미사용 매개변수 경고 방지
-    // TODO: 디버그 드로잉 기능 구현
+    UNITY_LOG_INFO("Debug draw enabled: %s", enabled ? "true" : "false");
+    // Unity NavMeshGizmo에서 직접 처리하므로 특별한 작업 불필요
 }
 
 UNITY_API void UnityRecast_GetDebugVertices(float* vertices, int* vertexCount) {
-    (void)vertices; // 미사용 매개변수 경고 방지
-    (void)vertexCount; // 미사용 매개변수 경고 방지
-    // TODO: 디버그 정점 정보 반환
-    if (vertexCount) {
+    UNITY_LOG_INFO("🎨 UnityRecast_GetDebugVertices called");
+    
+    if (!vertexCount) {
+        UNITY_LOG_ERROR("vertexCount pointer is null");
+        return;
+    }
+    
+    // 초기화 체크
+    if (!g_initialized || !g_navMeshBuilder) {
+        UNITY_LOG_WARNING("Not initialized or NavMeshBuilder is null");
+        *vertexCount = 0;
+        return;
+    }
+    
+    try {
+        // NavMeshBuilder에서 DetailMesh 데이터 가져오기
+        std::vector<float> debugVertices;
+        bool success = g_navMeshBuilder->GetDebugVertices(debugVertices);
+        
+        if (!success || debugVertices.empty()) {
+            UNITY_LOG_WARNING("No debug vertices available or failed to get vertices");
+            *vertexCount = 0;
+            return;
+        }
+        
+        int totalVertexCount = static_cast<int>(debugVertices.size() / 3);
+        UNITY_LOG_INFO("Debug vertices available: %d vertices (%d floats)", 
+                       totalVertexCount, static_cast<int>(debugVertices.size()));
+        
+        // 첫 번째 호출: vertexCount만 설정 (Unity에서 메모리 할당을 위해)
+        if (!vertices) {
+            *vertexCount = totalVertexCount;
+            UNITY_LOG_INFO("Returning vertex count: %d", totalVertexCount);
+            return;
+        }
+        
+        // 두 번째 호출: 실제 데이터 복사
+        if (*vertexCount >= totalVertexCount) {
+            std::memcpy(vertices, debugVertices.data(), debugVertices.size() * sizeof(float));
+            *vertexCount = totalVertexCount;
+            
+            // 첫 번째 정점 로그 출력 (확인용)
+            if (totalVertexCount > 0) {
+                UNITY_LOG_INFO("First vertex: (%.3f, %.3f, %.3f)", 
+                               debugVertices[0], debugVertices[1], debugVertices[2]);
+            }
+            
+            UNITY_LOG_INFO("✅ Debug vertices copied successfully: %d vertices", totalVertexCount);
+        } else {
+            UNITY_LOG_ERROR("Buffer too small! Required: %d, provided: %d", totalVertexCount, *vertexCount);
+            *vertexCount = 0;
+        }
+    }
+    catch (const std::exception& e) {
+        UNITY_LOG_ERROR("Exception in GetDebugVertices: %s", e.what());
         *vertexCount = 0;
     }
 }
 
 UNITY_API void UnityRecast_GetDebugIndices(int* indices, int* indexCount) {
-    (void)indices; // 미사용 매개변수 경고 방지
-    (void)indexCount; // 미사용 매개변수 경고 방지
-    // TODO: 디버그 인덱스 정보 반환
-    if (indexCount) {
+    UNITY_LOG_INFO("🎨 UnityRecast_GetDebugIndices called");
+    
+    if (!indexCount) {
+        UNITY_LOG_ERROR("indexCount pointer is null");
+        return;
+    }
+    
+    // 초기화 체크
+    if (!g_initialized || !g_navMeshBuilder) {
+        UNITY_LOG_WARNING("Not initialized or NavMeshBuilder is null");
+        *indexCount = 0;
+        return;
+    }
+    
+    try {
+        // NavMeshBuilder에서 DetailMesh 인덱스 데이터 가져오기
+        std::vector<int> debugIndices;
+        bool success = g_navMeshBuilder->GetDebugIndices(debugIndices);
+        
+        if (!success || debugIndices.empty()) {
+            UNITY_LOG_WARNING("No debug indices available or failed to get indices");
+            *indexCount = 0;
+            return;
+        }
+        
+        int totalIndexCount = static_cast<int>(debugIndices.size());
+        UNITY_LOG_INFO("Debug indices available: %d indices (%d triangles)", 
+                       totalIndexCount, totalIndexCount / 3);
+        
+        // 첫 번째 호출: indexCount만 설정 (Unity에서 메모리 할당을 위해)
+        if (!indices) {
+            *indexCount = totalIndexCount;
+            UNITY_LOG_INFO("Returning index count: %d", totalIndexCount);
+            return;
+        }
+        
+        // 두 번째 호출: 실제 데이터 복사
+        if (*indexCount >= totalIndexCount) {
+            std::memcpy(indices, debugIndices.data(), debugIndices.size() * sizeof(int));
+            *indexCount = totalIndexCount;
+            
+            // 첫 번째 삼각형 로그 출력 (확인용)
+            if (totalIndexCount >= 3) {
+                UNITY_LOG_INFO("First triangle indices: (%d, %d, %d)", 
+                               debugIndices[0], debugIndices[1], debugIndices[2]);
+            }
+            
+            UNITY_LOG_INFO("✅ Debug indices copied successfully: %d indices", totalIndexCount);
+        } else {
+            UNITY_LOG_ERROR("Buffer too small! Required: %d, provided: %d", totalIndexCount, *indexCount);
+            *indexCount = 0;
+        }
+    }
+    catch (const std::exception& e) {
+        UNITY_LOG_ERROR("Exception in GetDebugIndices: %s", e.what());
         *indexCount = 0;
     }
 }

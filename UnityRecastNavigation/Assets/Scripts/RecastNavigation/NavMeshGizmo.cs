@@ -155,7 +155,14 @@ namespace RecastNavigation
         {
             try
             {
+                Debug.Log("🔍 NavMeshGizmo: UpdateNavMeshData 시작");
+                
                 debugData = RecastNavigationWrapper.GetDebugMeshData();
+                
+                Debug.Log($"🔍 GetDebugMeshData 결과:");
+                Debug.Log($"  - Vertices: {(debugData.Vertices != null ? debugData.Vertices.Length.ToString() : "null")}");
+                Debug.Log($"  - Indices: {(debugData.Indices != null ? debugData.Indices.Length.ToString() : "null")}");
+                Debug.Log($"  - TriangleCount: {debugData.TriangleCount}");
                 
                 if (debugData.Vertices != null && debugData.Indices != null && debugData.Vertices.Length > 0)
                 {
@@ -168,20 +175,182 @@ namespace RecastNavigation
                     vertices.AddRange(debugData.Vertices);
                     indices.AddRange(debugData.Indices);
                     
+                    Debug.Log($"✅ NavMesh 데이터 로드됨: {vertices.Count}개 정점, {indices.Count/3}개 삼각형");
+                    
+                    // NavMesh 품질 분석
+                    AnalyzeNavMeshQuality();
+                    
+                    // === Unity side data bounding box calculation ===
+                    if (vertices.Count > 0)
+                    {
+                        Vector3 min = vertices[0];
+                        Vector3 max = vertices[0];
+                        
+                        foreach (Vector3 vertex in vertices)
+                        {
+                            if (vertex.x < min.x) min.x = vertex.x;
+                            if (vertex.y < min.y) min.y = vertex.y;
+                            if (vertex.z < min.z) min.z = vertex.z;
+                            
+                            if (vertex.x > max.x) max.x = vertex.x;
+                            if (vertex.y > max.y) max.y = vertex.y;
+                            if (vertex.z > max.z) max.z = vertex.z;
+                        }
+                        
+                        Debug.Log($"📊 Unity side bounding box: Min({min.x:F2}, {min.y:F2}, {min.z:F2}), Max({max.x:F2}, {max.y:F2}, {max.z:F2})");
+                        Vector3 size = max - min;
+                        Debug.Log($"📊 Unity side NavMesh size: ({size.x:F2} x {size.y:F2} x {size.z:F2})");
+                    }
+                    
                     // 삼각형 중심점과 노멀 계산
                     CalculateTriangleData();
                     
                     hasValidData = true;
+                    Debug.Log("✅ NavMesh 데이터 업데이트 완료");
                 }
                 else
                 {
                     hasValidData = false;
+                    Debug.LogWarning("⚠️ NavMesh 데이터가 비어있음");
                 }
             }
-            catch (System.Exception e)
+            catch (System.Exception ex)
             {
-                Debug.LogWarning($"NavMesh 데이터 업데이트 실패: {e.Message}");
+                Debug.LogError($"❌ NavMesh 데이터 업데이트 실패: {ex.Message}");
                 hasValidData = false;
+            }
+        }
+        
+        /// <summary>
+        /// NavMesh 품질 분석
+        /// </summary>
+        private void AnalyzeNavMeshQuality()
+        {
+            if (vertices.Count == 0 || indices.Count == 0)
+            {
+                Debug.LogWarning("⚠️ NavMesh 품질 분석: 데이터가 비어있음");
+                return;
+            }
+            
+            Debug.Log("🔬 === NavMesh 품질 분석 ===");
+            
+            // 기본 통계
+            int triangleCount = indices.Count / 3;
+            Debug.Log($"📊 기본 통계:");
+            Debug.Log($"  - 정점 수: {vertices.Count}");
+            Debug.Log($"  - 삼각형 수: {triangleCount}");
+            
+            // 경계 상자 및 면적 계산
+            Bounds bounds = CalculateBounds();
+            float area = bounds.size.x * bounds.size.z; // Y축 제외한 2D 면적
+            Debug.Log($"📊 경계 상자:");
+            Debug.Log($"  - 중심: ({bounds.center.x:F2}, {bounds.center.y:F2}, {bounds.center.z:F2})");
+            Debug.Log($"  - 크기: ({bounds.size.x:F2} x {bounds.size.y:F2} x {bounds.size.z:F2})");
+            Debug.Log($"  - 2D 면적: {area:F2} 제곱미터");
+            
+            // 삼각형 밀도 분석
+            if (triangleCount > 0)
+            {
+                float avgAreaPerTriangle = area / triangleCount;
+                float avgEdgeLength = Mathf.Sqrt(avgAreaPerTriangle);
+                
+                Debug.Log($"📊 삼각형 밀도:");
+                Debug.Log($"  - 삼각형당 평균 면적: {avgAreaPerTriangle:F2} 제곱미터");
+                Debug.Log($"  - 예상 평균 변 길이: {avgEdgeLength:F2} 미터");
+                
+                // 품질 평가
+                if (avgAreaPerTriangle > 10.0f)
+                {
+                    Debug.LogWarning($"⚠️ 품질 경고: 삼각형이 너무 큼 (평균 {avgAreaPerTriangle:F2}㎡)");
+                    Debug.LogWarning("  💡 제안: cellSize를 줄이거나 detailSampleDist를 줄여보세요");
+                }
+                else if (avgAreaPerTriangle < 0.1f)
+                {
+                    Debug.LogWarning($"⚠️ 품질 경고: 삼각형이 너무 작음 (평균 {avgAreaPerTriangle:F2}㎡)");
+                    Debug.LogWarning("  💡 제안: cellSize를 늘리거나 detailSampleDist를 늘려보세요");
+                }
+                else
+                {
+                    Debug.Log($"✅ 삼각형 크기가 적절함 (평균 {avgAreaPerTriangle:F2}㎡)");
+                }
+            }
+            
+            // 삼각형 품질 분석
+            AnalyzeTriangleShapes();
+            
+            Debug.Log("🔬 === NavMesh 품질 분석 완료 ===");
+        }
+        
+        /// <summary>
+        /// 삼각형 모양 품질 분석
+        /// </summary>
+        private void AnalyzeTriangleShapes()
+        {
+            if (indices.Count < 3)
+                return;
+            
+            Debug.Log($"🔺 삼각형 모양 분석:");
+            
+            float minArea = float.MaxValue;
+            float maxArea = 0f;
+            float totalArea = 0f;
+            int degenerateTriangles = 0;
+            int skinnyTriangles = 0;
+            
+            for (int i = 0; i < indices.Count; i += 3)
+            {
+                if (i + 2 < indices.Count)
+                {
+                    Vector3 v1 = vertices[indices[i]];
+                    Vector3 v2 = vertices[indices[i + 1]];
+                    Vector3 v3 = vertices[indices[i + 2]];
+                    
+                    // 삼각형 면적 계산
+                    float area = Vector3.Cross(v2 - v1, v3 - v1).magnitude * 0.5f;
+                    totalArea += area;
+                    minArea = Mathf.Min(minArea, area);
+                    maxArea = Mathf.Max(maxArea, area);
+                    
+                    // 퇴화된 삼각형 체크 (면적이 매우 작음)
+                    if (area < 0.001f)
+                    {
+                        degenerateTriangles++;
+                    }
+                    
+                    // 가늘고 긴 삼각형 체크 (aspect ratio)
+                    float[] edgeLengths = new float[3]
+                    {
+                        Vector3.Distance(v1, v2),
+                        Vector3.Distance(v2, v3),
+                        Vector3.Distance(v3, v1)
+                    };
+                    
+                    System.Array.Sort(edgeLengths);
+                    float aspectRatio = edgeLengths[2] / edgeLengths[0]; // 최장변/최단변
+                    
+                    if (aspectRatio > 10.0f) // 10:1 비율 이상이면 가늘고 긴 삼각형
+                    {
+                        skinnyTriangles++;
+                    }
+                }
+            }
+            
+            int triangleCount = indices.Count / 3;
+            Debug.Log($"  - 최소 면적: {minArea:F4} ㎡");
+            Debug.Log($"  - 최대 면적: {maxArea:F4} ㎡");
+            Debug.Log($"  - 평균 면적: {totalArea/triangleCount:F4} ㎡");
+            Debug.Log($"  - 퇴화된 삼각형: {degenerateTriangles}개 ({(float)degenerateTriangles/triangleCount*100:F1}%)");
+            Debug.Log($"  - 가늘고 긴 삼각형: {skinnyTriangles}개 ({(float)skinnyTriangles/triangleCount*100:F1}%)");
+            
+            if (degenerateTriangles > 0)
+            {
+                Debug.LogWarning($"⚠️ {degenerateTriangles}개의 퇴화된 삼각형 발견");
+            }
+            
+            if (skinnyTriangles > triangleCount * 0.1f) // 10% 이상이 가늘고 긴 삼각형
+            {
+                Debug.LogWarning($"⚠️ 가늘고 긴 삼각형이 너무 많음 ({skinnyTriangles}개)");
+                Debug.LogWarning("  💡 제안: maxSimplificationError 값을 조정해보세요");
             }
         }
         
@@ -224,8 +393,35 @@ namespace RecastNavigation
         /// </summary>
         private void OnDrawGizmos()
         {
-            if (!showNavMesh || !hasValidData || vertices.Count == 0)
+            // 디버그 로깅 (너무 많이 출력되지 않도록 조건부)
+            if (Time.frameCount % 120 == 0) // 2초마다 한 번
+            {
+                Debug.Log($"🎨 OnDrawGizmos 호출됨 - showNavMesh:{showNavMesh}, hasValidData:{hasValidData}, vertices:{vertices.Count}");
+            }
+            
+            if (!showNavMesh)
+            {
+                if (Time.frameCount % 120 == 0) Debug.Log("❌ showNavMesh = false");
                 return;
+            }
+            
+            if (!hasValidData)
+            {
+                if (Time.frameCount % 120 == 0) Debug.Log("❌ hasValidData = false");
+                return;
+            }
+            
+            if (vertices.Count == 0)
+            {
+                if (Time.frameCount % 120 == 0) Debug.Log("❌ vertices.Count = 0");
+                return;
+            }
+            
+            // 실제 그리기 시작
+            if (Time.frameCount % 120 == 0) 
+            {
+                Debug.Log($"✅ Gizmos 그리기 시작! 삼각형 수: {indices.Count/3}");
+            }
             
             // NavMesh 면 그리기
             if (showFaces)
@@ -265,6 +461,8 @@ namespace RecastNavigation
         {
             Gizmos.color = navMeshColor;
             
+            int triangleCount = 0;
+            
             for (int i = 0; i < indices.Count; i += 3)
             {
                 if (i + 2 < indices.Count)
@@ -279,11 +477,72 @@ namespace RecastNavigation
                         Vector3 v2 = vertices[idx2];
                         Vector3 v3 = vertices[idx3];
                         
-                        // 삼각형 그리기
-                        Gizmos.DrawMesh(GetCachedTriangleMesh(v1, v2, v3));
+                        // Unity Gizmos는 직접 삼각형을 그릴 수 없으므로 
+                        // 대신 작은 사각형들로 면적을 채우는 방식 사용
+                        DrawTriangleFilled(v1, v2, v3);
+                        
+                        triangleCount++;
                     }
                 }
             }
+            
+            // 삼각형 수 로깅 (디버깅용)
+            if (Time.frameCount % 120 == 0 && triangleCount > 0)
+            {
+                Debug.Log($"✅ {triangleCount}개 삼각형을 그렸습니다!");
+            }
+        }
+        
+        /// <summary>
+        /// 삼각형을 채워서 그리기 (Gizmos.DrawMesh 대체)
+        /// </summary>
+        private void DrawTriangleFilled(Vector3 v1, Vector3 v2, Vector3 v3)
+        {
+            // 삼각형의 중심점과 면적 계산
+            Vector3 center = (v1 + v2 + v3) / 3f;
+            
+            // 삼각형 면적 계산
+            float area = Vector3.Cross(v2 - v1, v3 - v1).magnitude * 0.5f;
+            
+            // 면적이 너무 작으면 점으로 표시
+            if (area < 0.01f)
+            {
+                Gizmos.DrawSphere(center, 0.05f);
+                return;
+            }
+            
+            // 삼각형 면적에 비례하여 세분화 수준 결정
+            int subdivisions = Mathf.Clamp(Mathf.RoundToInt(Mathf.Sqrt(area) * 2), 1, 8);
+            
+            // 삼각형을 작은 점들로 채우기
+            for (int i = 0; i <= subdivisions; i++)
+            {
+                for (int j = 0; j <= subdivisions - i; j++)
+                {
+                    if (i + j <= subdivisions)
+                    {
+                        float u = (float)i / subdivisions;
+                        float v = (float)j / subdivisions;
+                        float w = 1.0f - u - v;
+                        
+                        if (u >= 0 && v >= 0 && w >= 0)
+                        {
+                            Vector3 point = u * v1 + v * v2 + w * v3;
+                            float pointSize = 0.02f + area * 0.1f;
+                            Gizmos.DrawSphere(point, Mathf.Min(pointSize, 0.1f));
+                        }
+                    }
+                }
+            }
+            
+            // 삼각형 가장자리도 그리기
+            Gizmos.color = new Color(navMeshColor.r * 0.7f, navMeshColor.g * 0.7f, navMeshColor.b * 0.7f, navMeshColor.a);
+            Gizmos.DrawLine(v1, v2);
+            Gizmos.DrawLine(v2, v3);
+            Gizmos.DrawLine(v3, v1);
+            
+            // 원래 색상 복원
+            Gizmos.color = navMeshColor;
         }
         
         /// <summary>

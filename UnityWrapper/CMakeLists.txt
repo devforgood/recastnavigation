@@ -43,7 +43,14 @@ add_library(UnityWrapper SHARED
     ${UNITY_WRAPPER_HEADERS}
 )
 
-# 헤더 파일 경로 설정
+# 헤더 파일 경로 설정 (RecastDemo 방식과 동일)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Include)
+include_directories(${CMAKE_SOURCE_DIR}/Recast/Include)
+include_directories(${CMAKE_SOURCE_DIR}/Detour/Include)
+include_directories(${CMAKE_SOURCE_DIR}/DetourCrowd/Include)
+include_directories(${CMAKE_SOURCE_DIR}/DetourTileCache/Include)
+include_directories(${CMAKE_SOURCE_DIR}/DebugUtils/Include)
+
 target_include_directories(UnityWrapper PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Include
     ${CMAKE_SOURCE_DIR}/Recast/Include
@@ -52,6 +59,9 @@ target_include_directories(UnityWrapper PRIVATE
     ${CMAKE_SOURCE_DIR}/DetourTileCache/Include
     ${CMAKE_SOURCE_DIR}/DebugUtils/Include
 )
+
+# 의존성 설정 (빌드 순서 보장)
+add_dependencies(UnityWrapper Recast Detour DetourCrowd DetourTileCache DebugUtils)
 
 # 라이브러리 링크 (직접 링크)
 target_link_libraries(UnityWrapper

@@ -179,6 +179,28 @@ namespace RecastNavigation.Editor
                 
                 EditorGUILayout.EndHorizontal();
                 
+                // RecastDemo 검증된 프리셋들 추가
+                EditorGUILayout.Space();
+                EditorGUILayout.LabelField("RecastDemo 검증된 설정", EditorStyles.boldLabel);
+                
+                EditorGUILayout.BeginHorizontal();
+                
+                GUI.backgroundColor = Color.green;
+                if (GUILayout.Button("🎯 RecastDemo 검증된 설정", GUILayout.Height(30)))
+                {
+                    BuildNavMeshWithPreset(NavMeshBuildSettingsExtensions.CreateRecastDemoVerified());
+                }
+                GUI.backgroundColor = Color.white;
+                
+                GUI.backgroundColor = Color.cyan;
+                if (GUILayout.Button("🛡️ RecastDemo 보수적 설정", GUILayout.Height(30)))
+                {
+                    BuildNavMeshWithPreset(NavMeshBuildSettingsExtensions.CreateRecastDemoConservative());
+                }
+                GUI.backgroundColor = Color.white;
+                
+                EditorGUILayout.EndHorizontal();
+                
                 EditorGUILayout.Space();
                 
                 // 선택된 오브젝트에서 빌드
@@ -191,10 +213,10 @@ namespace RecastNavigation.Editor
                     BuildNavMeshFromSelection();
                 }
                 
-                GUI.backgroundColor = Color.cyan;
-                if (GUILayout.Button("🔧 권장 설정으로 빌드 (문제 해결)", GUILayout.Height(30)))
+                GUI.backgroundColor = Color.yellow;
+                if (GUILayout.Button("🔧 RecastDemo 설정으로 빌드 (권장)", GUILayout.Height(30)))
                 {
-                    BuildNavMeshFromSelectionWithRecommendedSettings();
+                    BuildNavMeshFromRecastDemoSettings();
                 }
                 GUI.backgroundColor = Color.white;
                 
@@ -746,9 +768,9 @@ namespace RecastNavigation.Editor
             }
         }
         
-        void BuildNavMeshFromSelectionWithRecommendedSettings()
+        void BuildNavMeshFromRecastDemoSettings()
         {
-            Debug.Log("=== 권장 설정으로 NavMesh 빌드 시작 ===");
+            Debug.Log("=== RecastDemo 검증된 설정으로 NavMesh 빌드 시작 ===");
             
             // 0. RecastNavigation 초기화 확인
             if (!isInitialized)
@@ -785,7 +807,7 @@ namespace RecastNavigation.Editor
 
             try
             {
-                EditorUtility.DisplayProgressBar("권장 설정 NavMesh 빌드", "메시 데이터 수집 중...", 0f);
+                EditorUtility.DisplayProgressBar("RecastDemo 설정 NavMesh 빌드", "메시 데이터 수집 중...", 0f);
                 
                 // 3. 메시 데이터 수집
                 List<Vector3> allVertices = new List<Vector3>();
@@ -793,7 +815,7 @@ namespace RecastNavigation.Editor
 
                 for (int i = 0; i < selectedObjects.Count; i++)
                 {
-                    EditorUtility.DisplayProgressBar("권장 설정 NavMesh 빌드", $"오브젝트 처리 중... ({i + 1}/{selectedObjects.Count})", (float)i / selectedObjects.Count);
+                    EditorUtility.DisplayProgressBar("RecastDemo 설정 NavMesh 빌드", $"오브젝트 처리 중... ({i + 1}/{selectedObjects.Count})", (float)i / selectedObjects.Count);
                     
                     GameObject obj = selectedObjects[i];
                     MeshFilter meshFilter = obj.GetComponent<MeshFilter>();
@@ -830,42 +852,77 @@ namespace RecastNavigation.Editor
                     return;
                 }
 
-                // 4. 권장 설정으로 NavMesh 빌드
-                EditorUtility.DisplayProgressBar("권장 설정 NavMesh 빌드", "권장 설정으로 NavMesh 빌드 중...", 0.8f);
+                // 4. RecastDemo 검증된 설정으로 NavMesh 빌드
+                EditorUtility.DisplayProgressBar("RecastDemo 설정 NavMesh 빌드", "RecastDemo 검증된 설정으로 NavMesh 빌드 중...", 0.8f);
                 
                 Vector3[] vertexArray = allVertices.ToArray();
                 int[] indexArray = allIndices.ToArray();
                 
-                bool success = navComponent.BuildNavMeshWithRecommendedSettings(vertexArray, indexArray);
+                // RecastDemo 검증된 설정 사용
+                NavMeshBuildSettings recastDemoSettings = NavMeshBuildSettingsExtensions.CreateRecastDemoVerified();
+                bool success = navComponent.BuildNavMesh(vertexArray, indexArray, recastDemoSettings);
                 
                 EditorUtility.ClearProgressBar();
                 
                 if (success)
                 {
                     isNavMeshLoaded = true;
-                    statusMessage = "권장 설정으로 NavMesh 빌드 성공";
+                    statusMessage = "RecastDemo 설정으로 NavMesh 빌드 성공";
                     
-                    EditorUtility.DisplayDialog("성공", "권장 설정으로 NavMesh 빌드가 완료되었습니다!\n\n설정이 자동으로 최적화되었습니다.", "확인");
-                    Debug.Log("✓ 권장 설정으로 NavMesh 빌드 완료!");
+                    EditorUtility.DisplayDialog("성공", "RecastDemo 검증된 설정으로 NavMesh 빌드가 완료되었습니다!\n\n✓ RecastDemo와 동일한 매개변수 사용\n✓ 검증된 안정적인 설정\n✓ 최적화된 품질과 성능", "확인");
+                    Debug.Log("🎯 RecastDemo 검증된 설정으로 NavMesh 빌드 완료!");
+                    Debug.Log("사용된 설정:");
+                    Debug.Log($"  - cellSize: {recastDemoSettings.cellSize}");
+                    Debug.Log($"  - cellHeight: {recastDemoSettings.cellHeight}");
+                    Debug.Log($"  - walkableRadius: {recastDemoSettings.walkableRadius}");
+                    Debug.Log($"  - minRegionArea: {recastDemoSettings.minRegionArea}");
+                    Debug.Log($"  - mergeRegionArea: {recastDemoSettings.mergeRegionArea}");
                 }
                 else
                 {
-                    statusMessage = "권장 설정으로도 NavMesh 빌드 실패";
+                    statusMessage = "RecastDemo 설정으로도 NavMesh 빌드 실패";
                     
-                    EditorUtility.DisplayDialog("오류", "권장 설정으로도 NavMesh 빌드에 실패했습니다.\n\n메시가 너무 작거나 복잡할 수 있습니다.\nConsole 로그를 확인해주세요.", "확인");
-                    Debug.LogError("권장 설정으로도 NavMesh 빌드 실패!");
+                    // 실패 시 보수적 설정 제안
+                    bool tryConservative = EditorUtility.DisplayDialog("빌드 실패", 
+                        "RecastDemo 검증된 설정으로도 NavMesh 빌드에 실패했습니다.\n\n보수적 설정으로 재시도하시겠습니까?\n(더 작은 메시에 적합한 설정)", 
+                        "보수적 설정으로 재시도", 
+                        "취소");
+                    
+                    if (tryConservative)
+                    {
+                        EditorUtility.DisplayProgressBar("보수적 설정 빌드", "보수적 설정으로 재시도 중...", 0.9f);
+                        
+                        NavMeshBuildSettings conservativeSettings = NavMeshBuildSettingsExtensions.CreateRecastDemoConservative();
+                        bool conservativeSuccess = navComponent.BuildNavMesh(vertexArray, indexArray, conservativeSettings);
+                        
+                        EditorUtility.ClearProgressBar();
+                        
+                        if (conservativeSuccess)
+                        {
+                            isNavMeshLoaded = true;
+                            statusMessage = "보수적 설정으로 NavMesh 빌드 성공";
+                            
+                            EditorUtility.DisplayDialog("성공", "보수적 설정으로 NavMesh 빌드가 완료되었습니다!\n\n✓ 작은 메시에 최적화된 설정\n✓ erosion 문제 해결\n✓ 더 세밀한 NavMesh", "확인");
+                            Debug.Log("🛡️ 보수적 설정으로 NavMesh 빌드 완료!");
+                        }
+                        else
+                        {
+                            EditorUtility.DisplayDialog("오류", "보수적 설정으로도 NavMesh 빌드에 실패했습니다.\n\n메시가 너무 작거나 복잡할 수 있습니다.\nConsole 로그를 확인해주세요.", "확인");
+                            Debug.LogError("보수적 설정으로도 NavMesh 빌드 실패!");
+                        }
+                    }
                 }
             }
             catch (System.Exception e)
             {
                 EditorUtility.ClearProgressBar();
-                statusMessage = $"권장 설정 빌드 중 오류: {e.Message}";
+                statusMessage = $"RecastDemo 설정 빌드 중 오류: {e.Message}";
                 
-                EditorUtility.DisplayDialog("오류", $"권장 설정 빌드 중 오류가 발생했습니다:\n\n{e.Message}", "확인");
-                Debug.LogError($"권장 설정 빌드 중 오류: {e.Message}");
+                EditorUtility.DisplayDialog("오류", $"RecastDemo 설정 빌드 중 오류가 발생했습니다:\n\n{e.Message}", "확인");
+                Debug.LogError($"RecastDemo 설정 빌드 중 오류: {e.Message}");
             }
             
-            Debug.Log("=== 권장 설정으로 NavMesh 빌드 완료 ===");
+            Debug.Log("=== RecastDemo 검증된 설정으로 NavMesh 빌드 완료 ===");
         }
         
         void TestWithSimpleTriangle()

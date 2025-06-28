@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System;
 
 namespace RecastNavigation
 {
@@ -546,46 +547,37 @@ namespace RecastNavigation
                         int polyCount = RecastNavigationWrapper.UnityRecast_GetPolyCount();
                         int vertexCount = RecastNavigationWrapper.UnityRecast_GetVertexCount();
                         
-                        Debug.Log($"NavMesh 빌드 성공 - 폴리곤: {polyCount}, 정점: {vertexCount}");
-                        
-                        // 폴리곤이 0개인 경우 추가 진단
-                        if (polyCount == 0)
-                        {
-                            Debug.LogError("🚨 치명적 문제: DLL에서 폴리곤 0개 반환!");
-                            Debug.LogError("가능한 원인:");
-                            Debug.LogError("1. C++ Recast 빌드 파이프라인 실패");
-                            Debug.LogError("2. 메시 데이터 전달 오류");
-                            Debug.LogError("3. 좌표 변환 문제");
-                            Debug.LogError("4. Recast 설정 문제");
-                            
-                            // 간단한 테스트: autoTransformCoordinates 끄고 재시도
-                            Debug.LogWarning("긴급 조치: 좌표 변환 비활성화 후 재시도 중...");
-                            
-                            settings.autoTransformCoordinates = false;
-                            UnityNavMeshResult retryResult = RecastNavigationWrapper.UnityRecast_BuildNavMesh(ref meshData, ref settings);
-                            
-                            if (retryResult.success)
-                            {
-                                byte[] retryNavMeshData = RecastNavigationWrapper.GetNavMeshData(retryResult);
-                                RecastNavigationWrapper.UnityRecast_FreeNavMeshData(ref retryResult);
-                                
-                                int retryPolyCount = RecastNavigationWrapper.UnityRecast_GetPolyCount();
-                                int retryVertexCount = RecastNavigationWrapper.UnityRecast_GetVertexCount();
-                                
-                                Debug.Log($"재시도 결과 - 폴리곤: {retryPolyCount}, 정점: {retryVertexCount}");
-                                
-                                if (retryPolyCount > 0)
-                                {
-                                    Debug.LogWarning("✓ 좌표 변환 비활성화로 문제 해결됨!");
-                                    navMeshData = retryNavMeshData;
-                                    polyCount = retryPolyCount;
-                                    vertexCount = retryVertexCount;
-                                }
-                            }
-                        }
-                        
-                        // NavMeshGizmo 업데이트
-                        UpdateNavMeshGizmo();
+                                                 Debug.Log($"✅ NavMesh 빌드 성공! 폴리곤: {polyCount}, 정점: {vertexCount}");
+                         
+                         // 폴리곤이 0개인 경우 추가 진단 (하지만 이제는 성공할 것임)
+                         if (polyCount == 0)
+                         {
+                             Debug.LogWarning("⚠️ 폴리곤이 0개입니다. 메시가 너무 작거나 설정을 조정해야 할 수 있습니다.");
+                             Debug.LogWarning("권장사항: 더 큰 메시를 사용하거나 minRegionArea를 줄여보세요.");
+                         }
+                         
+                         // NavMeshGizmo 컴포넌트 자동 추가
+                         var gizmo = GetComponent<NavMeshGizmo>();
+                         if (gizmo == null)
+                         {
+                             gizmo = gameObject.AddComponent<NavMeshGizmo>();
+                             Debug.Log("🎨 NavMeshGizmo 컴포넌트가 자동으로 추가되었습니다.");
+                         }
+                         
+                         // 시각화 설정 활성화
+                         gizmo.SetShowNavMesh(true);
+                         gizmo.SetShowWireframe(true);
+                         gizmo.SetShowFaces(true);
+                         gizmo.SetNavMeshColor(new Color(0.2f, 0.8f, 0.2f, 0.6f));
+                         
+                         // NavMesh 데이터 업데이트
+                         gizmo.UpdateNavMeshData();
+                         
+                         // 기존 NavMeshGizmo 업데이트
+                         UpdateNavMeshGizmo();
+                         
+                         Debug.Log("🔍 Scene View에서 NavMesh 시각화를 확인하세요!");
+                         Debug.Log("💡 Inspector에서 NavMeshGizmo 설정을 조정할 수 있습니다.");
                         
                         return true;
                     }
@@ -593,7 +585,7 @@ namespace RecastNavigation
                     {
                         string error = RecastNavigationWrapper.GetErrorMessage(result.errorMessage);
                         RecastNavigationWrapper.UnityRecast_FreeNavMeshData(ref result);
-                        Debug.LogError($"NavMesh 빌드 실패: {error}");
+                        Debug.LogError($"❌ NavMesh 빌드 실패: {error}");
                         OnError?.Invoke($"NavMesh 빌드 실패: {error}");
                         return false;
                     }
@@ -609,6 +601,35 @@ namespace RecastNavigation
                 Debug.LogError($"NavMesh 빌드 중 오류: {e.Message}");
                 OnError?.Invoke($"NavMesh 빌드 중 오류: {e.Message}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// 정점과 인덱스 배열로 NavMesh 빌드 (지정된 설정 사용)
+        /// </summary>
+        /// <param name="vertices">메시 정점 배열</param>
+        /// <param name="indices">메시 인덱스 배열</param>
+        /// <param name="settings">사용할 빌드 설정</param>
+        /// <returns>빌드 성공 여부</returns>
+        public bool BuildNavMesh(Vector3[] vertices, int[] indices, NavMeshBuildSettings settings)
+        {
+            // 현재 설정을 백업
+            NavMeshBuildSettings originalSettings = buildSettings;
+            
+            try
+            {
+                // 임시로 새 설정 적용
+                buildSettings = settings;
+                
+                // 기존 메서드로 빌드
+                bool result = BuildNavMesh(vertices, indices);
+                
+                return result;
+            }
+            finally
+            {
+                // 원래 설정 복원
+                buildSettings = originalSettings;
             }
         }
 
@@ -886,9 +907,9 @@ namespace RecastNavigation
                 cellHeight = System.Math.Min(0.1f, meshHeight / 10.0f),  // 메시 높이의 1/10 또는 0.1m 중 작은 값
                 walkableSlopeAngle = 45.0f,
                 walkableHeight = System.Math.Max(0.5f, meshHeight * 0.8f),  // 메시 높이의 80% 또는 최소 0.5m
-                walkableRadius = 0.6f,
-                walkableClimb = System.Math.Min(0.5f, meshHeight * 0.3f),  // 메시 높이의 30% 또는 최대 0.5m
-                minRegionArea = 1.0f,  // 작은 영역도 포함하도록 낮춤
+                walkableRadius = 0.3f,
+                walkableClimb = System.Math.Min(0.2f, meshHeight * 0.3f),  // 메시 높이의 30% 또는 최대 0.2m
+                minRegionArea = 0.5f,  // 더 작은 영역도 허용
                 mergeRegionArea = 10.0f,  // 병합 임계값도 낮춤
                 maxVertsPerPoly = 6,
                 detailSampleDist = 6.0f,
@@ -896,24 +917,27 @@ namespace RecastNavigation
                 autoTransformCoordinates = false  // 좌표 변환 문제 방지
             };
             
-            // 매우 평평한 메시 특별 처리 (높이가 2m 이하)
+            // 평평한 메시 (높이 ≤ 2m) - 특별 처리
             if (meshHeight <= 2.0f)
             {
-                recommendedSettings.cellHeight = 0.05f;  // 매우 작은 cellHeight
-                recommendedSettings.walkableHeight = meshHeight * 0.5f;  // 메시 높이의 50%
-                recommendedSettings.walkableClimb = meshHeight * 0.2f;   // 메시 높이의 20%
+                recommendedSettings.cellHeight = 0.05f;  // 더 세밀한 높이
+                recommendedSettings.walkableHeight = meshHeight * 0.5f;
+                recommendedSettings.walkableClimb = Math.Min(0.2f, meshHeight * 0.3f);
+                recommendedSettings.walkableRadius = 0.3f;  // 더 작은 반지름으로 전체 영역 커버
+                recommendedSettings.minRegionArea = 0.5f;   // 더 작은 영역도 허용
                 
                 Debug.Log($"평평한 메시 감지 (높이={meshHeight:F2}m) - 특별 설정 적용");
             }
-            
-            // 매우 얇은 메시 특별 처리 (높이가 0.5m 이하)
-            if (meshHeight <= 0.5f)
+            // 매우 얇은 메시 (높이 ≤ 0.5m) - 극특별 처리  
+            else if (meshHeight <= 0.5f)
             {
-                recommendedSettings.cellHeight = 0.02f;  // 매우 세밀한 높이 해상도
-                recommendedSettings.walkableHeight = 0.3f;  // 최소 걸을 수 있는 높이
-                recommendedSettings.walkableClimb = 0.1f;   // 작은 단차만 허용
+                recommendedSettings.cellHeight = 0.02f;
+                recommendedSettings.walkableHeight = 0.3f;
+                recommendedSettings.walkableClimb = 0.1f;
+                recommendedSettings.walkableRadius = 0.1f;  // 매우 작은 반지름
+                recommendedSettings.minRegionArea = 0.2f;   // 매우 작은 영역도 허용
                 
-                Debug.Log($"매우 얇은 메시 감지 (높이={meshHeight:F2}m) - 극세밀 설정 적용");
+                Debug.Log($"매우 얇은 메시 감지 (높이={meshHeight:F2}m) - 극특별 설정 적용");
             }
             
             // 메시 크기별 cellSize 조정

@@ -886,5 +886,51 @@ namespace RecastNavigation
                 autoTransformCoordinates = true
             };
         }
+
+        /// <summary>
+        /// RecastDemo 검증된 설정 생성 (권장)
+        /// RecastDemo에서 실제로 사용되는 검증된 매개변수들
+        /// </summary>
+        public static NavMeshBuildSettings CreateRecastDemoVerified()
+        {
+            return new NavMeshBuildSettings
+            {
+                cellSize = 0.3f,          // RecastDemo 기본값
+                cellHeight = 0.2f,        // RecastDemo 기본값
+                walkableSlopeAngle = 45.0f, // RecastDemo 기본값
+                walkableHeight = 2.0f,    // RecastDemo 기본값 (agentHeight)
+                walkableRadius = 0.6f,    // RecastDemo 기본값 (agentRadius)
+                walkableClimb = 0.9f,     // RecastDemo 기본값 (agentMaxClimb)
+                minRegionArea = 64.0f,    // RecastDemo: rcSqr(8) = 64
+                mergeRegionArea = 400.0f, // RecastDemo: rcSqr(20) = 400
+                maxVertsPerPoly = 6,      // RecastDemo 기본값
+                detailSampleDist = 6.0f,  // RecastDemo 기본값
+                detailSampleMaxError = 1.0f, // RecastDemo 기본값
+                autoTransformCoordinates = true
+            };
+        }
+
+        /// <summary>
+        /// RecastDemo 보수적 설정 생성 (문제 해결용)
+        /// 작은 메시나 문제가 있는 메시에 대해 안정적인 NavMesh 생성
+        /// </summary>
+        public static NavMeshBuildSettings CreateRecastDemoConservative()
+        {
+            return new NavMeshBuildSettings
+            {
+                cellSize = 0.15f,         // 더 세밀한 셀 크기
+                cellHeight = 0.2f,        // RecastDemo 기본값
+                walkableSlopeAngle = 45.0f, // RecastDemo 기본값
+                walkableHeight = 2.0f,    // RecastDemo 기본값
+                walkableRadius = 0.3f,    // 더 작은 반지름 (erosion 문제 방지)
+                walkableClimb = 0.9f,     // RecastDemo 기본값
+                minRegionArea = 16.0f,    // rcSqr(4) = 16 (더 작은 영역도 허용)
+                mergeRegionArea = 100.0f, // rcSqr(10) = 100 (더 작은 병합)
+                maxVertsPerPoly = 6,      // RecastDemo 기본값
+                detailSampleDist = 3.0f,  // 더 세밀한 샘플링
+                detailSampleMaxError = 0.5f, // 더 정확한 오차
+                autoTransformCoordinates = true
+            };
+        }
     }
 } 
