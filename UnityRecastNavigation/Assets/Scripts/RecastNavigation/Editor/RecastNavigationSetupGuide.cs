@@ -434,25 +434,62 @@ namespace RecastNavigation.Editor
                 Debug.LogWarning($"[RecastNavigation] Failed to get source file info: {ex.Message}");
             }
             
-            // Create Plugins folder
+            // Create Plugins/Editor folder (for Editor-only DLL to reduce file locking)
             string pluginsPath = "Assets/Plugins/";
-            Debug.Log($"[RecastNavigation] Target plugins folder: {pluginsPath}");
+            string editorPath = "Assets/Plugins/Editor/";
+            Debug.Log($"[RecastNavigation] Target Editor folder: {editorPath}");
             
+            // Ensure Plugins folder exists
             if (!Directory.Exists(pluginsPath))
             {
                 Debug.Log("[RecastNavigation] Plugins folder does not exist. Creating...");
                 Directory.CreateDirectory(pluginsPath);
                 Debug.Log("[RecastNavigation] Plugins folder created successfully");
             }
+            
+            // Ensure Editor folder exists
+            if (!Directory.Exists(editorPath))
+            {
+                Debug.Log("[RecastNavigation] Editor folder does not exist. Creating...");
+                Directory.CreateDirectory(editorPath);
+                Debug.Log("[RecastNavigation] Editor folder created successfully");
+                Debug.Log("[RecastNavigation] ✓ Editor 폴더로 이동하면 DLL 잠금 문제가 크게 개선됩니다!");
+            }
             else
             {
-                Debug.Log("[RecastNavigation] Plugins folder already exists");
+                Debug.Log("[RecastNavigation] Editor folder already exists");
             }
             
-            // DLL copy
+            // DLL copy to Editor folder
             string fileName = Path.GetFileName(dllPath);
-            string destPath = Path.Combine(pluginsPath, fileName);
+            string destPath = Path.Combine(editorPath, fileName);
+            string oldPluginsPath = Path.Combine(pluginsPath, fileName);
             Debug.Log($"[RecastNavigation] Target DLL path: {destPath}");
+            
+            // Clean up old DLL in Plugins folder (if exists)
+            if (File.Exists(oldPluginsPath) && !oldPluginsPath.Equals(destPath, System.StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    Debug.Log($"[RecastNavigation] Found old DLL in Plugins folder: {oldPluginsPath}");
+                    Debug.Log("[RecastNavigation] Removing old DLL to prevent conflicts...");
+                    File.Delete(oldPluginsPath);
+                    Debug.Log("[RecastNavigation] ✓ Old DLL removed successfully");
+                    
+                    // Also remove .meta file if it exists
+                    string oldMetaPath = oldPluginsPath + ".meta";
+                    if (File.Exists(oldMetaPath))
+                    {
+                        File.Delete(oldMetaPath);
+                        Debug.Log("[RecastNavigation] ✓ Old .meta file removed");
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[RecastNavigation] Could not remove old DLL: {ex.Message}");
+                    Debug.LogWarning("[RecastNavigation] 이전 DLL이 삭제되지 않았지만 계속 진행합니다.");
+                }
+            }
             
                           try
               {
@@ -1624,18 +1661,47 @@ AssemblyDefinitionImporter:
         void CheckDllStatus()
         {
             string pluginsPath = "Assets/Plugins/";
-            string dllName = "RecastNavigationUnity.dll";
-            string dllPath = Path.Combine(pluginsPath, dllName);
+            string editorPath = "Assets/Plugins/Editor/";
+            string dllName = "UnityWrapper.dll";  // 실제 DLL 이름으로 수정
             
-            if (File.Exists(dllPath))
+            string editorDllPath = Path.Combine(editorPath, dllName);
+            string pluginsDllPath = Path.Combine(pluginsPath, dllName);
+            
+            string statusMessage = "=== DLL 상태 확인 ===\n\n";
+            bool foundDll = false;
+            
+            // Editor 폴더 확인 (권장 위치)
+            if (File.Exists(editorDllPath))
             {
-                FileInfo fileInfo = new FileInfo(dllPath);
-                EditorUtility.DisplayDialog("DLL 상태", $"DLL이 존재합니다.\n경로: {dllPath}\n크기: {fileInfo.Length} bytes\n수정일: {fileInfo.LastWriteTime}", "확인");
+                FileInfo fileInfo = new FileInfo(editorDllPath);
+                statusMessage += $"✓ Editor 폴더 DLL 발견 (권장)\n";
+                statusMessage += $"경로: {editorDllPath}\n";
+                statusMessage += $"크기: {fileInfo.Length:N0} bytes\n";
+                statusMessage += $"수정일: {fileInfo.LastWriteTime}\n\n";
+                foundDll = true;
             }
-            else
+            
+            // Plugins 폴더 확인 (이전 위치)
+            if (File.Exists(pluginsDllPath))
             {
-                EditorUtility.DisplayDialog("DLL 상태", "DLL을 찾을 수 없습니다.", "확인");
+                FileInfo fileInfo = new FileInfo(pluginsDllPath);
+                statusMessage += $"⚠️ Plugins 폴더 DLL 발견 (이전 위치)\n";
+                statusMessage += $"경로: {pluginsDllPath}\n";
+                statusMessage += $"크기: {fileInfo.Length:N0} bytes\n";
+                statusMessage += $"수정일: {fileInfo.LastWriteTime}\n\n";
+                statusMessage += "권장: Editor 폴더로 이동하여 DLL 잠금 문제 해결\n\n";
+                foundDll = true;
             }
+            
+            if (!foundDll)
+            {
+                statusMessage += "❌ DLL을 찾을 수 없습니다.\n\n";
+                statusMessage += "확인된 위치:\n";
+                statusMessage += $"- {editorDllPath}\n";
+                statusMessage += $"- {pluginsDllPath}\n";
+            }
+            
+            EditorUtility.DisplayDialog("DLL 상태", statusMessage, "확인");
         }
         
         void CheckScriptStatus()

@@ -198,6 +198,15 @@ namespace RecastNavigation.Editor
                 }
                 GUI.backgroundColor = Color.white;
                 
+                EditorGUILayout.Space(3);
+                
+                GUI.backgroundColor = Color.yellow;
+                if (GUILayout.Button("🧪 초간단 테스트 메시로 진단", GUILayout.Height(25)))
+                {
+                    TestWithSimpleTriangle();
+                }
+                GUI.backgroundColor = Color.white;
+                
                 if (GUILayout.Button("선택된 오브젝트 정보"))
                 {
                     ShowSelectionInfo();
@@ -857,6 +866,115 @@ namespace RecastNavigation.Editor
             }
             
             Debug.Log("=== 권장 설정으로 NavMesh 빌드 완료 ===");
+        }
+        
+        void TestWithSimpleTriangle()
+        {
+            Debug.Log("=== 🧪 초간단 테스트 메시 진단 시작 ===");
+            
+            // 초기화 확인
+            if (!isInitialized)
+            {
+                InitializeRecastNavigation();
+                if (!isInitialized)
+                {
+                    EditorUtility.DisplayDialog("오류", "RecastNavigation 초기화 실패", "확인");
+                    return;
+                }
+            }
+            
+            // RecastNavigationComponent 확인/생성
+            RecastNavigationComponent navComponent = FindObjectOfType<RecastNavigationComponent>();
+            if (navComponent == null)
+            {
+                navComponent = CreateRecastNavigationComponent();
+                if (navComponent == null)
+                {
+                    EditorUtility.DisplayDialog("오류", "RecastNavigationComponent 생성 실패", "확인");
+                    return;
+                }
+            }
+            
+            // 초간단 테스트 메시 생성: 거대한 삼각형 1개
+            Vector3[] testVertices = new Vector3[]
+            {
+                new Vector3(-50f, 0f, -50f),  // 좌하
+                new Vector3(50f, 0f, -50f),   // 우하  
+                new Vector3(0f, 0f, 50f)      // 상중앙
+            };
+            
+            int[] testIndices = new int[] { 0, 1, 2 };
+            
+            Debug.Log("테스트 메시 정보:");
+            Debug.Log($"  정점 3개: {testVertices[0]}, {testVertices[1]}, {testVertices[2]}");
+            Debug.Log($"  삼각형 1개: 인덱스 {testIndices[0]}-{testIndices[1]}-{testIndices[2]}");
+            Debug.Log($"  면적: 약 {100 * 100 / 2}m²");
+            
+            try
+            {
+                EditorUtility.DisplayProgressBar("초간단 테스트", "테스트 메시로 NavMesh 빌드 중...", 0.5f);
+                
+                // 1차: 권장 설정으로 빌드
+                Debug.Log("=== 1차 테스트: 권장 설정 ===");
+                bool success1 = navComponent.BuildNavMeshWithRecommendedSettings(testVertices, testIndices);
+                
+                if (!success1)
+                {
+                    Debug.LogError("1차 테스트 실패: 권장 설정으로도 실패");
+                    
+                    // 2차: 수동 최적 설정으로 빌드  
+                    Debug.Log("=== 2차 테스트: 수동 최적 설정 ===");
+                    
+                    var manualSettings = new NavMeshBuildSettings
+                    {
+                        cellSize = 1.0f,           // 큰 cellSize
+                        cellHeight = 0.2f,
+                        walkableSlopeAngle = 45.0f,
+                        walkableHeight = 2.0f,
+                        walkableRadius = 0.6f,
+                        walkableClimb = 0.9f,
+                        minRegionArea = 0.1f,      // 매우 작은 영역도 허용
+                        mergeRegionArea = 0.5f,
+                        maxVertsPerPoly = 6,
+                        detailSampleDist = 6.0f,
+                        detailSampleMaxError = 1.0f,
+                        autoTransformCoordinates = false  // 좌표 변환 끄기
+                    };
+                    
+                    navComponent.UpdateBuildSettings(manualSettings);
+                    bool success2 = navComponent.BuildNavMesh(testVertices, testIndices);
+                    
+                    if (success2)
+                    {
+                        Debug.Log("✓ 2차 테스트 성공: 수동 설정으로 해결됨!");
+                        statusMessage = "초간단 테스트 성공 (수동 설정)";
+                    }
+                    else
+                    {
+                        Debug.LogError("❌ 2차 테스트도 실패: 심각한 C++ DLL 문제 의심");
+                        statusMessage = "초간단 테스트 실패 - DLL 문제";
+                    }
+                }
+                else
+                {
+                    Debug.Log("✓ 1차 테스트 성공: 권장 설정으로 해결됨!");
+                    statusMessage = "초간단 테스트 성공 (권장 설정)";
+                }
+                
+                EditorUtility.ClearProgressBar();
+                
+                // 결과 대화상자
+                string result = success1 ? "권장 설정으로 성공" : "권장 설정 실패";
+                EditorUtility.DisplayDialog("테스트 완료", $"초간단 테스트 메시 결과:\n{result}\n\nConsole 로그를 확인하세요.", "확인");
+            }
+            catch (System.Exception e)
+            {
+                EditorUtility.ClearProgressBar();
+                Debug.LogError($"초간단 테스트 중 오류: {e.Message}");
+                EditorUtility.DisplayDialog("오류", $"테스트 중 오류:\n{e.Message}", "확인");
+            }
+            
+            Debug.Log("=== 🧪 초간단 테스트 메시 진단 완료 ===");
         }
         
         void ShowSelectionInfo()

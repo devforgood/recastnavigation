@@ -463,6 +463,23 @@ namespace RecastNavigation
                 Debug.Log($"권장 minRegionArea: 8");
                 Debug.Log($"권장 mergeRegionArea: 20");
             }
+            
+            // 추가 진단: 메시 품질 검사
+            Debug.Log("=== 메시 품질 진단 ===");
+            Debug.Log($"삼각형 밀도: {indices.Length/3} 삼각형 / {meshSize.x * meshSize.z:F1}m² = {(indices.Length/3) / (meshSize.x * meshSize.z):F4} 삼각형/m²");
+            
+            // 메시 높이 문제 체크
+            if (meshSize.y < 0.1f)
+            {
+                Debug.LogWarning($"⚠️ 메시가 매우 평평합니다 (높이={meshSize.y:F3}m). NavMesh 생성에 문제가 될 수 있습니다.");
+            }
+            
+            // 정점 샘플 출력 (처음 몇 개)
+            Debug.Log("=== 정점 샘플 (처음 4개) ===");
+            for (int i = 0; i < System.Math.Min(4, vertices.Length); i++)
+            {
+                Debug.Log($"  정점[{i}]: {vertices[i]}");
+            }
 
             try
             {
@@ -512,14 +529,60 @@ namespace RecastNavigation
                     };
 
                     // NavMesh 빌드
+                    Debug.Log("=== C++ DLL NavMesh 빌드 시작 ===");
                     UnityNavMeshResult result = RecastNavigationWrapper.UnityRecast_BuildNavMesh(ref meshData, ref settings);
 
+                    Debug.Log($"DLL 빌드 결과: success={result.success}");
+                    Debug.Log($"DLL 데이터 크기: {result.dataSize} bytes");
+                    Debug.Log($"DLL 데이터 포인터: {result.navMeshData}");
+                    
                     if (result.success)
                     {
                         navMeshData = RecastNavigationWrapper.GetNavMeshData(result);
+                        Debug.Log($"Unity 측 navMeshData 크기: {navMeshData?.Length ?? 0} bytes");
+                        
                         RecastNavigationWrapper.UnityRecast_FreeNavMeshData(ref result);
 
-                        Debug.Log($"NavMesh 빌드 성공 - 폴리곤: {RecastNavigationWrapper.UnityRecast_GetPolyCount()}, 정점: {RecastNavigationWrapper.UnityRecast_GetVertexCount()}");
+                        int polyCount = RecastNavigationWrapper.UnityRecast_GetPolyCount();
+                        int vertexCount = RecastNavigationWrapper.UnityRecast_GetVertexCount();
+                        
+                        Debug.Log($"NavMesh 빌드 성공 - 폴리곤: {polyCount}, 정점: {vertexCount}");
+                        
+                        // 폴리곤이 0개인 경우 추가 진단
+                        if (polyCount == 0)
+                        {
+                            Debug.LogError("🚨 치명적 문제: DLL에서 폴리곤 0개 반환!");
+                            Debug.LogError("가능한 원인:");
+                            Debug.LogError("1. C++ Recast 빌드 파이프라인 실패");
+                            Debug.LogError("2. 메시 데이터 전달 오류");
+                            Debug.LogError("3. 좌표 변환 문제");
+                            Debug.LogError("4. Recast 설정 문제");
+                            
+                            // 간단한 테스트: autoTransformCoordinates 끄고 재시도
+                            Debug.LogWarning("긴급 조치: 좌표 변환 비활성화 후 재시도 중...");
+                            
+                            settings.autoTransformCoordinates = false;
+                            UnityNavMeshResult retryResult = RecastNavigationWrapper.UnityRecast_BuildNavMesh(ref meshData, ref settings);
+                            
+                            if (retryResult.success)
+                            {
+                                byte[] retryNavMeshData = RecastNavigationWrapper.GetNavMeshData(retryResult);
+                                RecastNavigationWrapper.UnityRecast_FreeNavMeshData(ref retryResult);
+                                
+                                int retryPolyCount = RecastNavigationWrapper.UnityRecast_GetPolyCount();
+                                int retryVertexCount = RecastNavigationWrapper.UnityRecast_GetVertexCount();
+                                
+                                Debug.Log($"재시도 결과 - 폴리곤: {retryPolyCount}, 정점: {retryVertexCount}");
+                                
+                                if (retryPolyCount > 0)
+                                {
+                                    Debug.LogWarning("✓ 좌표 변환 비활성화로 문제 해결됨!");
+                                    navMeshData = retryNavMeshData;
+                                    polyCount = retryPolyCount;
+                                    vertexCount = retryVertexCount;
+                                }
+                            }
+                        }
                         
                         // NavMeshGizmo 업데이트
                         UpdateNavMeshGizmo();
@@ -813,16 +876,16 @@ namespace RecastNavigation
             Vector3 meshSize = maxBounds - minBounds;
             float maxDimension = System.Math.Max(meshSize.x, meshSize.z);
             
-            // 권장 설정 생성
+            // 권장 설정 생성 (RecastNavigation 최적화)
             var recommendedSettings = new NavMeshBuildSettings
             {
-                cellSize = maxDimension * 0.15f,  // 메시 크기의 15%
+                cellSize = 0.3f,  // 고정값: 일반적인 에이전트에 최적화
                 cellHeight = 0.2f,
                 walkableSlopeAngle = 45.0f,
                 walkableHeight = 2.0f,
                 walkableRadius = 0.6f,
                 walkableClimb = 0.9f,
-                minRegionArea = 8.0f,
+                minRegionArea = 2.0f,  // 작은 영역도 포함
                 mergeRegionArea = 20.0f,
                 maxVertsPerPoly = 6,
                 detailSampleDist = 6.0f,
@@ -830,20 +893,23 @@ namespace RecastNavigation
                 autoTransformCoordinates = true
             };
             
-            // 작은 메시의 경우 더 세밀한 설정
+            // 메시 크기별 동적 조정 (RecastNavigation 안전 범위)
             if (maxDimension < 10.0f)
             {
-                recommendedSettings.cellSize = System.Math.Max(maxDimension * 0.1f, 0.05f);
+                // 작은 메시: 더 세밀하게
+                recommendedSettings.cellSize = 0.1f;
+                recommendedSettings.minRegionArea = 1.0f;
+                recommendedSettings.mergeRegionArea = 5.0f;
+            }
+            else if (maxDimension > 100.0f)
+            {
+                // 큰 메시: 성능 최적화
+                recommendedSettings.cellSize = 0.5f;
                 recommendedSettings.minRegionArea = 4.0f;
                 recommendedSettings.mergeRegionArea = 10.0f;
             }
-            // 큰 메시의 경우 최적화된 설정
-            else if (maxDimension > 100.0f)
-            {
-                recommendedSettings.cellSize = maxDimension * 0.2f;
-                recommendedSettings.minRegionArea = 16.0f;
-                recommendedSettings.mergeRegionArea = 40.0f;
-            }
+            
+            Debug.Log($"최종 권장 설정: cellSize={recommendedSettings.cellSize:F3}, minRegionArea={recommendedSettings.minRegionArea:F1}");
             
             return recommendedSettings;
         }
