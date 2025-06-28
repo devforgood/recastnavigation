@@ -409,46 +409,48 @@ bool UnityNavMeshBuilder::BuildHeightfield(const UnityMeshData* meshData, const 
 }
 
 bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSettings* settings) {
-    UNITY_LOG_INFO("  BuildCompactHeightfield: 시작");
+    UNITY_LOG_INFO("  BuildCompactHeightfield: start");
     
     m_chf = std::make_unique<rcCompactHeightfield>();
     
-    UNITY_LOG_INFO("  rcBuildCompactHeightfield 호출...");
-    if (!rcBuildCompactHeightfield(m_ctx.get(), settings->walkableHeight, settings->walkableClimb,
-                                  *m_solid, *m_chf)) {
-        UNITY_LOG_ERROR("  ERROR: rcBuildCompactHeightfield 실패");
+    UNITY_LOG_INFO("  rcBuildCompactHeightfield calling...");
+    if (!rcBuildCompactHeightfield(m_ctx.get(), static_cast<int>(settings->walkableHeight), 
+                                  static_cast<int>(settings->walkableClimb), *m_solid, *m_chf)) {
+        UNITY_LOG_ERROR("  ERROR: rcBuildCompactHeightfield failed");
         return false;
     }
-    UNITY_LOG_INFO("  rcBuildCompactHeightfield 성공");
+    UNITY_LOG_INFO("  rcBuildCompactHeightfield success");
     
-    // walkableRadius가 0보다 클 때만 erosion 수행
-    // if (settings->walkableRadius > 0.0f) {
-    //     if (!rcErodeWalkableArea(m_ctx.get(), settings->walkableRadius, *m_chf)) {
-    //         return false;
-    //     }
-    // }
+    // CompactHeightfield 데이터 상세 확인
+    UNITY_LOG_INFO("  === CompactHeightfield data check ===");
+    UNITY_LOG_INFO("  CompactHeightfield: width=%d, height=%d", m_chf->width, m_chf->height);
+    UNITY_LOG_INFO("  CompactHeightfield: spanCount=%d", m_chf->spanCount);
+    UNITY_LOG_INFO("  CompactHeightfield: walkableHeight=%d", static_cast<int>(settings->walkableHeight));
+    UNITY_LOG_INFO("  CompactHeightfield: walkableClimb=%d", static_cast<int>(settings->walkableClimb));
     
-    // Erosion 단계를 완전히 건너뛰기 (크래시 방지)
-    
-    // Distance field 생성도 건너뛰기 (크래시 방지)
-    // if (!rcBuildDistanceField(m_ctx.get(), *m_chf)) {
-    //     return false;
-    // }
-    
-    // Region 생성도 건너뛰기 (크래시 방지)
-    // if (!rcBuildRegions(m_ctx.get(), *m_chf, 0, settings->minRegionArea, settings->mergeRegionArea)) {
-    //     return false;
-    // }
-    
-    // 대신 간단한 폴리곤을 직접 생성
-    UNITY_LOG_INFO("  CreateSimplePolyMesh 호출...");
-    bool result = CreateSimplePolyMesh(settings);
-    if (result) {
-        UNITY_LOG_INFO("  CreateSimplePolyMesh 성공");
-    } else {
-        UNITY_LOG_ERROR("  ERROR: CreateSimplePolyMesh 실패");
+    // walkable한 span 개수 세기
+    int walkableSpans = 0;
+    for (int i = 0; i < m_chf->width * m_chf->height; ++i) {
+        const rcCompactCell& c = m_chf->cells[i];
+        for (int j = 0; j < c.count; ++j) {
+            const rcCompactSpan& s = m_chf->spans[c.index + j];
+            if (s.reg != RC_NULL_AREA) {
+                walkableSpans++;
+            }
+        }
     }
-    return result;
+    UNITY_LOG_INFO("  Walkable spans: %d", walkableSpans);
+    
+    if (walkableSpans == 0) {
+        UNITY_LOG_WARNING("  WARNING: No walkable spans found! ContourSet generation will fail");
+    }
+    
+    // 간단한 테스트 PolyMesh 생성 (문제 진단용)
+    UNITY_LOG_INFO("  CreateSimplePolyMesh calling...");
+    CreateSimplePolyMesh(settings);
+    UNITY_LOG_INFO("  CreateSimplePolyMesh success");
+    
+    return true;
 }
 
 bool UnityNavMeshBuilder::BuildContourSet(const UnityNavMeshBuildSettings* settings) {
@@ -457,7 +459,14 @@ bool UnityNavMeshBuilder::BuildContourSet(const UnityNavMeshBuildSettings* setti
     if (!rcBuildContours(m_ctx.get(), *m_chf, settings->maxSimplificationError, 
                         static_cast<int>(settings->maxEdgeLen), *m_cset, 
                         RC_CONTOUR_TESS_WALL_EDGES)) {
+        UNITY_LOG_ERROR("  ERROR: rcBuildContours failed");
         return false;
+    }
+    
+    // 실제 생성된 contour 개수 확인
+    UNITY_LOG_INFO("  ContourSet result: nconts=%d", m_cset->nconts);
+    if (m_cset->nconts == 0) {
+        UNITY_LOG_WARNING("  WARNING: ContourSet is empty! (nconts=0)");
     }
     
     return true;
@@ -467,7 +476,14 @@ bool UnityNavMeshBuilder::BuildPolyMesh(const UnityNavMeshBuildSettings* setting
     m_pmesh = std::make_unique<rcPolyMesh>();
     
     if (!rcBuildPolyMesh(m_ctx.get(), *m_cset, settings->maxVertsPerPoly, *m_pmesh)) {
+        UNITY_LOG_ERROR("  ERROR: rcBuildPolyMesh failed");
         return false;
+    }
+    
+    // 실제 생성된 폴리곤 개수 확인
+    UNITY_LOG_INFO("  PolyMesh result: nverts=%d, npolys=%d", m_pmesh->nverts, m_pmesh->npolys);
+    if (m_pmesh->npolys == 0) {
+        UNITY_LOG_WARNING("  WARNING: PolyMesh is empty! (npolys=0)");
     }
     
     return true;
@@ -478,7 +494,14 @@ bool UnityNavMeshBuilder::BuildDetailMesh(const UnityNavMeshBuildSettings* setti
     
     if (!rcBuildPolyMeshDetail(m_ctx.get(), *m_pmesh, *m_chf, settings->detailSampleDist,
                               settings->detailSampleMaxError, *m_dmesh)) {
+        UNITY_LOG_ERROR("  ERROR: rcBuildPolyMeshDetail failed");
         return false;
+    }
+    
+    // 실제 생성된 detail mesh 개수 확인
+    UNITY_LOG_INFO("  DetailMesh result: nverts=%d, ntris=%d", m_dmesh->nverts, m_dmesh->ntris);
+    if (m_dmesh->ntris == 0) {
+        UNITY_LOG_WARNING("  WARNING: DetailMesh is empty! (ntris=0)");
     }
     
     return true;
@@ -487,9 +510,34 @@ bool UnityNavMeshBuilder::BuildDetailMesh(const UnityNavMeshBuildSettings* setti
 bool UnityNavMeshBuilder::BuildDetourNavMesh(const UnityNavMeshBuildSettings* settings) {
     UNITY_LOG_INFO("  BuildDetourNavMesh: start");
     
+    // m_pmesh와 m_dmesh 상태 상세 확인
+    UNITY_LOG_INFO("  === PolyMesh/DetailMesh status check ===");
+    UNITY_LOG_INFO("  m_pmesh pointer: %s", (m_pmesh ? "valid" : "NULL"));
+    UNITY_LOG_INFO("  m_dmesh pointer: %s", (m_dmesh ? "valid" : "NULL"));
+    
+    if (m_pmesh) {
+        UNITY_LOG_INFO("  m_pmesh->nverts: %d", m_pmesh->nverts);
+        UNITY_LOG_INFO("  m_pmesh->npolys: %d", m_pmesh->npolys);
+        UNITY_LOG_INFO("  m_pmesh->verts: %s", (m_pmesh->verts ? "valid" : "NULL"));
+        UNITY_LOG_INFO("  m_pmesh->polys: %s", (m_pmesh->polys ? "valid" : "NULL"));
+    }
+    
+    if (m_dmesh) {
+        UNITY_LOG_INFO("  m_dmesh->nverts: %d", m_dmesh->nverts);
+        UNITY_LOG_INFO("  m_dmesh->ntris: %d", m_dmesh->ntris);
+        UNITY_LOG_INFO("  m_dmesh->verts: %s", (m_dmesh->verts ? "valid" : "NULL"));
+        UNITY_LOG_INFO("  m_dmesh->tris: %s", (m_dmesh->tris ? "valid" : "NULL"));
+    }
+    
     // m_pmesh와 m_dmesh가 없거나 데이터가 비어있으면 간단한 테스트용 NavMesh 생성
     if (!m_pmesh || !m_dmesh || m_pmesh->nverts == 0 || m_pmesh->npolys == 0) {
-        UNITY_LOG_INFO("  m_pmesh or m_dmesh is null/empty, creating test NavMesh...");
+        UNITY_LOG_WARNING("  WARNING: No real NavMesh data, creating test NavMesh!");
+        UNITY_LOG_INFO("  Reason: m_pmesh=%s, m_dmesh=%s", 
+                       (m_pmesh ? "valid" : "NULL"), 
+                       (m_dmesh ? "valid" : "NULL"));
+        if (m_pmesh) {
+            UNITY_LOG_INFO("  m_pmesh status: nverts=%d, npolys=%d", m_pmesh->nverts, m_pmesh->npolys);
+        }
         
         // 직접 NavMesh 데이터 생성 (테스트용)
         const int NAVMESHSET_MAGIC = 'M'|('S'<<8)|('E'<<16)|('T'<<24);
@@ -543,7 +591,7 @@ bool UnityNavMeshBuilder::BuildDetourNavMesh(const UnityNavMeshBuildSettings* se
     }
     
     // 실제 m_pmesh와 m_dmesh가 있는 경우 상태 확인
-    UNITY_LOG_INFO("  Using existing m_pmesh and m_dmesh:");
+    UNITY_LOG_INFO("  Using real NavMesh data:");
     UNITY_LOG_INFO("  m_pmesh status: %s", (m_pmesh ? "valid" : "null"));
     UNITY_LOG_INFO("  m_dmesh status: %s", (m_dmesh ? "valid" : "null"));
     if (m_pmesh) {

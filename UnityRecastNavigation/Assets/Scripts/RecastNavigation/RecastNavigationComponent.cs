@@ -875,41 +875,70 @@ namespace RecastNavigation
             
             Vector3 meshSize = maxBounds - minBounds;
             float maxDimension = System.Math.Max(meshSize.x, meshSize.z);
+            float meshHeight = meshSize.y;
             
-            // 권장 설정 생성 (RecastNavigation 최적화)
+            Debug.Log($"메시 크기 분석: 가로={meshSize.x:F2}m, 높이={meshHeight:F2}m, 세로={meshSize.z:F2}m");
+            
+            // 권장 설정 생성 (메시 높이에 맞춰 조정)
             var recommendedSettings = new NavMeshBuildSettings
             {
                 cellSize = 0.3f,  // 고정값: 일반적인 에이전트에 최적화
-                cellHeight = 0.2f,
+                cellHeight = System.Math.Min(0.1f, meshHeight / 10.0f),  // 메시 높이의 1/10 또는 0.1m 중 작은 값
                 walkableSlopeAngle = 45.0f,
-                walkableHeight = 2.0f,
+                walkableHeight = System.Math.Max(0.5f, meshHeight * 0.8f),  // 메시 높이의 80% 또는 최소 0.5m
                 walkableRadius = 0.6f,
-                walkableClimb = 0.9f,
-                minRegionArea = 2.0f,  // 작은 영역도 포함
-                mergeRegionArea = 20.0f,
+                walkableClimb = System.Math.Min(0.5f, meshHeight * 0.3f),  // 메시 높이의 30% 또는 최대 0.5m
+                minRegionArea = 1.0f,  // 작은 영역도 포함하도록 낮춤
+                mergeRegionArea = 10.0f,  // 병합 임계값도 낮춤
                 maxVertsPerPoly = 6,
                 detailSampleDist = 6.0f,
                 detailSampleMaxError = 1.0f,
-                autoTransformCoordinates = true
+                autoTransformCoordinates = false  // 좌표 변환 문제 방지
             };
             
-            // 메시 크기별 동적 조정 (RecastNavigation 안전 범위)
+            // 매우 평평한 메시 특별 처리 (높이가 2m 이하)
+            if (meshHeight <= 2.0f)
+            {
+                recommendedSettings.cellHeight = 0.05f;  // 매우 작은 cellHeight
+                recommendedSettings.walkableHeight = meshHeight * 0.5f;  // 메시 높이의 50%
+                recommendedSettings.walkableClimb = meshHeight * 0.2f;   // 메시 높이의 20%
+                
+                Debug.Log($"평평한 메시 감지 (높이={meshHeight:F2}m) - 특별 설정 적용");
+            }
+            
+            // 매우 얇은 메시 특별 처리 (높이가 0.5m 이하)
+            if (meshHeight <= 0.5f)
+            {
+                recommendedSettings.cellHeight = 0.02f;  // 매우 세밀한 높이 해상도
+                recommendedSettings.walkableHeight = 0.3f;  // 최소 걸을 수 있는 높이
+                recommendedSettings.walkableClimb = 0.1f;   // 작은 단차만 허용
+                
+                Debug.Log($"매우 얇은 메시 감지 (높이={meshHeight:F2}m) - 극세밀 설정 적용");
+            }
+            
+            // 메시 크기별 cellSize 조정
             if (maxDimension < 10.0f)
             {
                 // 작은 메시: 더 세밀하게
                 recommendedSettings.cellSize = 0.1f;
-                recommendedSettings.minRegionArea = 1.0f;
-                recommendedSettings.mergeRegionArea = 5.0f;
+                recommendedSettings.minRegionArea = 0.5f;
             }
             else if (maxDimension > 100.0f)
             {
                 // 큰 메시: 성능 최적화
                 recommendedSettings.cellSize = 0.5f;
-                recommendedSettings.minRegionArea = 4.0f;
-                recommendedSettings.mergeRegionArea = 10.0f;
+                recommendedSettings.minRegionArea = 2.0f;
             }
             
-            Debug.Log($"최종 권장 설정: cellSize={recommendedSettings.cellSize:F3}, minRegionArea={recommendedSettings.minRegionArea:F1}");
+            // 설정값이 너무 작아지지 않도록 최소값 보장
+            recommendedSettings.cellHeight = System.Math.Max(recommendedSettings.cellHeight, 0.01f);
+            recommendedSettings.walkableHeight = System.Math.Max(recommendedSettings.walkableHeight, 0.1f);
+            recommendedSettings.walkableClimb = System.Math.Max(recommendedSettings.walkableClimb, 0.05f);
+            
+            Debug.Log($"최종 권장 설정:");
+            Debug.Log($"  cellSize={recommendedSettings.cellSize:F3}, cellHeight={recommendedSettings.cellHeight:F3}");
+            Debug.Log($"  walkableHeight={recommendedSettings.walkableHeight:F3}, walkableClimb={recommendedSettings.walkableClimb:F3}");
+            Debug.Log($"  minRegionArea={recommendedSettings.minRegionArea:F1}");
             
             return recommendedSettings;
         }
