@@ -352,10 +352,45 @@ namespace RecastNavigation
                 Marshal.FreeHGlobal(vertexPtr);
                 Marshal.FreeHGlobal(indexPtr);
 
+                // 빌드 결과 상세 분석
+                Debug.Log($"=== DLL BuildNavMesh 결과 분석 ===");
+                Debug.Log($"result.success: {result.success}");
+                Debug.Log($"result.navMeshData: {result.navMeshData}");
+                Debug.Log($"result.dataSize: {result.dataSize}");
+                Debug.Log($"result.errorMessage: {result.errorMessage}");
+
                 if (result.success)
                 {
+                    // NavMeshData 추출 전 상태 확인
+                    bool hasValidData = result.navMeshData != IntPtr.Zero && result.dataSize > 0;
+                    Debug.Log($"유효한 NavMesh 데이터 존재: {hasValidData}");
+                    
+                    if (!hasValidData)
+                    {
+                        Debug.LogError("빌드는 성공했지만 NavMesh 데이터가 유효하지 않습니다!");
+                        Debug.LogError($"navMeshData: {result.navMeshData}, dataSize: {result.dataSize}");
+                        UnityRecast_FreeNavMeshData(ref result);
+                        return new NavMeshBuildResult 
+                        { 
+                            Success = false, 
+                            ErrorMessage = "빌드는 성공했지만 NavMesh 데이터가 유효하지 않음" 
+                        };
+                    }
+
                     byte[] navMeshData = GetNavMeshData(result);
+                    Debug.Log($"GetNavMeshData 결과: {(navMeshData != null ? $"{navMeshData.Length} 바이트" : "null")}");
+                    
                     UnityRecast_FreeNavMeshData(ref result);
+
+                    if (navMeshData == null || navMeshData.Length == 0)
+                    {
+                        Debug.LogError("GetNavMeshData가 null 또는 빈 배열을 반환했습니다!");
+                        return new NavMeshBuildResult 
+                        { 
+                            Success = false, 
+                            ErrorMessage = "NavMesh 데이터 추출 실패" 
+                        };
+                    }
 
                     return new NavMeshBuildResult
                     {
@@ -366,6 +401,7 @@ namespace RecastNavigation
                 else
                 {
                     string error = GetErrorMessage(result.errorMessage);
+                    Debug.LogError($"DLL BuildNavMesh 실패: {error}");
                     UnityRecast_FreeNavMeshData(ref result);
                     return new NavMeshBuildResult { Success = false, ErrorMessage = error };
                 }
@@ -767,7 +803,7 @@ namespace RecastNavigation
     }
 
     /// <summary>
-    /// NavMesh 빌드 설정
+    /// Unity NavMesh 빌드 설정
     /// </summary>
     [Serializable]
     public struct NavMeshBuildSettings
@@ -783,6 +819,8 @@ namespace RecastNavigation
         public int maxVertsPerPoly;
         public float detailSampleDist;
         public float detailSampleMaxError;
+        public float maxSimplificationError;
+        public float maxEdgeLen;
         public bool autoTransformCoordinates;
     }
 
@@ -836,6 +874,8 @@ namespace RecastNavigation
                 walkableClimb = 0.9f,
                 minRegionArea = 8.0f,
                 mergeRegionArea = 20.0f,
+                maxEdgeLen = 12.0f,
+                maxSimplificationError = 1.3f,
                 maxVertsPerPoly = 6,
                 detailSampleDist = 6.0f,
                 detailSampleMaxError = 1.0f,
@@ -858,6 +898,8 @@ namespace RecastNavigation
                 walkableClimb = 0.9f,
                 minRegionArea = 4.0f,
                 mergeRegionArea = 10.0f,
+                maxEdgeLen = 8.0f,
+                maxSimplificationError = 0.8f,
                 maxVertsPerPoly = 6,
                 detailSampleDist = 3.0f,
                 detailSampleMaxError = 0.5f,
@@ -880,6 +922,8 @@ namespace RecastNavigation
                 walkableClimb = 0.9f,
                 minRegionArea = 16.0f,
                 mergeRegionArea = 40.0f,
+                maxEdgeLen = 16.0f,
+                maxSimplificationError = 2.0f,
                 maxVertsPerPoly = 6,
                 detailSampleDist = 12.0f,
                 detailSampleMaxError = 2.0f,
@@ -903,6 +947,8 @@ namespace RecastNavigation
                 walkableClimb = 0.9f,     // RecastDemo 기본값 (agentMaxClimb)
                 minRegionArea = 64.0f,    // RecastDemo: rcSqr(8) = 64
                 mergeRegionArea = 400.0f, // RecastDemo: rcSqr(20) = 400
+                maxEdgeLen = 12.0f,       // RecastDemo 기본값
+                maxSimplificationError = 1.3f, // RecastDemo 기본값
                 maxVertsPerPoly = 6,      // RecastDemo 기본값
                 detailSampleDist = 6.0f,  // RecastDemo 기본값
                 detailSampleMaxError = 1.0f, // RecastDemo 기본값
@@ -911,25 +957,37 @@ namespace RecastNavigation
         }
 
         /// <summary>
-        /// RecastDemo 보수적 설정 생성 (문제 해결용)
-        /// 작은 메시나 문제가 있는 메시에 대해 안정적인 NavMesh 생성
+        /// RecastDemo 보수적 설정 - 작은 메시나 복잡한 메시에 적합
         /// </summary>
         public static NavMeshBuildSettings CreateRecastDemoConservative()
         {
             return new NavMeshBuildSettings
             {
-                cellSize = 0.15f,         // 더 세밀한 셀 크기
-                cellHeight = 0.2f,        // RecastDemo 기본값
-                walkableSlopeAngle = 45.0f, // RecastDemo 기본값
-                walkableHeight = 2.0f,    // RecastDemo 기본값
-                walkableRadius = 0.3f,    // 더 작은 반지름 (erosion 문제 방지)
-                walkableClimb = 0.9f,     // RecastDemo 기본값
-                minRegionArea = 16.0f,    // rcSqr(4) = 16 (더 작은 영역도 허용)
-                mergeRegionArea = 100.0f, // rcSqr(10) = 100 (더 작은 병합)
-                maxVertsPerPoly = 6,      // RecastDemo 기본값
-                detailSampleDist = 3.0f,  // 더 세밀한 샘플링
-                detailSampleMaxError = 0.5f, // 더 정확한 오차
-                autoTransformCoordinates = true
+                // 매우 정밀한 cellSize로 높은 해상도 보장
+                cellSize = 0.05f,          // 기존 0.1f → 0.05f (더 정밀)
+                cellHeight = 0.1f,         // 기존 0.2f → 0.1f (더 정밀)
+                
+                // Agent 설정 (RecastDemo 기본값)
+                walkableHeight = 2.0f,
+                walkableRadius = 0.02f,    // 기존 0.3f → 0.02f (매우 보수적, erosion 최소화)
+                walkableClimb = 0.9f,
+                walkableSlopeAngle = 45.0f,
+                
+                // Region 설정 (매우 관대한 설정)
+                minRegionArea = 1.0f,      // 기존 4 → 1 (거의 모든 region 허용)
+                mergeRegionArea = 5.0f,    // 기존 20 → 5 (작은 region도 유지)
+                
+                // 폴리곤 설정 (높은 품질)
+                maxEdgeLen = 6.0f,         // 기존 12.0f → 6.0f (더 정밀한 경계)
+                maxSimplificationError = 0.5f, // 기존 1.3f → 0.5f (더 정확한 형태)
+                maxVertsPerPoly = 6,
+                
+                // Detail mesh 설정 (높은 품질)
+                detailSampleDist = 3.0f,   // 기존 6.0f → 3.0f (더 정밀)
+                detailSampleMaxError = 0.5f, // 기존 1.0f → 0.5f (더 정확)
+                
+                // 좌표 변환 설정
+                autoTransformCoordinates = false
             };
         }
     }

@@ -4,6 +4,20 @@ using RecastNavigation;
 using System.IO;
 using System.Collections.Generic;
 
+/// <summary>
+/// 직렬화 가능한 NavMesh 데이터 구조체 (JSON 저장용)
+/// </summary>
+[System.Serializable]
+public class SerializableNavMeshData
+{
+    public Vector3[] vertices;
+    public int[] indices;
+    public int triangleCount;
+    public int polyCount;
+    public int vertexCount;
+    public long timestamp;
+}
+
 namespace RecastNavigation.Editor
 {
     /// <summary>
@@ -1059,20 +1073,142 @@ namespace RecastNavigation.Editor
             if (!isNavMeshLoaded)
             {
                 Debug.LogWarning("저장할 NavMesh가 없습니다.");
+                statusMessage = "저장할 NavMesh가 없습니다";
                 return;
             }
             
-            // 디렉토리 생성
-            if (!Directory.Exists(quickSavePath))
+            try
             {
-                Directory.CreateDirectory(quickSavePath);
+                // 디렉토리 생성
+                if (!Directory.Exists(quickSavePath))
+                {
+                    Directory.CreateDirectory(quickSavePath);
+                }
+                
+                string fileName = $"NavMesh_Quick_{System.DateTime.Now:yyyyMMdd_HHmmss}.bytes";
+                string fullPath = Path.Combine(quickSavePath, fileName);
+                
+                // 현재 로드된 NavMesh 데이터 가져오기
+                // Unity C# API로는 현재 로드된 NavMesh 데이터를 직접 가져올 수 없으므로
+                // 빌드 시 저장된 데이터를 사용하거나 재빌드해야 함
+                
+                byte[] navMeshDataToSave = null;
+                
+                // 방법 1: 기존 RecastNavigationComponent 데이터 확인
+                RecastNavigationComponent navComponent = FindObjectOfType<RecastNavigationComponent>();
+                if (navComponent != null && navComponent.IsNavMeshLoaded)
+                {
+                    byte[] existingData = navComponent.GetNavMeshData();
+                    if (existingData != null && existingData.Length > 0)
+                    {
+                        navMeshDataToSave = existingData;
+                        Debug.Log($"✅ RecastNavigationComponent에서 NavMesh 데이터 찾음: {navMeshDataToSave.Length} 바이트");
+                    }
+                }
+                
+                // 방법 2: DLL dataSize 문제 우회 - 디버그 메시 데이터 사용
+                if (navMeshDataToSave == null)
+                {
+                    Debug.LogWarning("⚠️ RecastNavigationComponent에서 데이터를 찾을 수 없습니다.");
+                    Debug.LogWarning("🔧 DLL dataSize=0 문제를 우회하여 디버그 메시 데이터로 저장을 시도합니다...");
+                    
+                    try
+                    {
+                        // 현재 로드된 NavMesh의 디버그 데이터 가져오기
+                        var debugData = RecastNavigationWrapper.GetDebugMeshData();
+                        if (debugData.Vertices != null && debugData.Vertices.Length > 0 && 
+                            debugData.Indices != null && debugData.Indices.Length > 0)
+                        {
+                            // 디버그 메시 데이터를 직렬화해서 저장
+                            var serializableData = new SerializableNavMeshData
+                            {
+                                vertices = debugData.Vertices,
+                                indices = debugData.Indices,
+                                triangleCount = debugData.TriangleCount,
+                                polyCount = RecastNavigationWrapper.GetPolyCount(),
+                                vertexCount = RecastNavigationWrapper.GetVertexCount(),
+                                timestamp = System.DateTime.Now.ToBinary()
+                            };
+                            
+                            // JSON으로 직렬화
+                            string jsonData = UnityEngine.JsonUtility.ToJson(serializableData, true);
+                            navMeshDataToSave = System.Text.Encoding.UTF8.GetBytes(jsonData);
+                            
+                            Debug.Log($"✅ 디버그 메시 데이터로 NavMesh 생성:");
+                            Debug.Log($"   - 정점: {debugData.Vertices.Length}개");
+                            Debug.Log($"   - 삼각형: {debugData.TriangleCount}개");
+                            Debug.Log($"   - 직렬화 크기: {navMeshDataToSave.Length} 바이트");
+                            
+                            // 파일명을 JSON으로 변경
+                            fileName = $"NavMesh_Debug_{System.DateTime.Now:yyyyMMdd_HHmmss}.json";
+                            fullPath = Path.Combine(quickSavePath, fileName);
+                        }
+                        else
+                        {
+                            Debug.LogError("디버그 메시 데이터도 비어있습니다!");
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogError($"디버그 메시 데이터 추출 실패: {ex.Message}");
+                    }
+                }
+                
+                // 방법 3: 마지막 수단 - 성공한 설정으로 재빌드
+                if (navMeshDataToSave == null)
+                {
+                    Debug.LogWarning("🔄 마지막 수단: 성공한 설정으로 재빌드를 시도합니다...");
+                    
+                    // RecastDemo 검증된 설정으로 재빌드 (이전에 성공했던 설정)
+                    var recastDemoSettings = NavMeshBuildSettingsExtensions.CreateRecastDemoVerified();
+                    var combinedMesh = CollectSceneMeshes();
+                    
+                    if (combinedMesh != null)
+                    {
+                        Debug.Log("재빌드용 메시 정보:");
+                        Debug.Log($"  - 정점: {combinedMesh.vertexCount}개");
+                        Debug.Log($"  - 삼각형: {combinedMesh.triangles.Length / 3}개");
+                        
+                        var result = RecastNavigationWrapper.BuildNavMesh(combinedMesh, recastDemoSettings);
+                        if (result.Success && result.NavMeshData != null && result.NavMeshData.Length > 0)
+                        {
+                            navMeshDataToSave = result.NavMeshData;
+                            Debug.Log($"✅ 재빌드 성공: {navMeshDataToSave.Length} 바이트");
+                        }
+                        else
+                        {
+                            Debug.LogError($"❌ 재빌드도 실패: Success={result.Success}, DataLength={result.NavMeshData?.Length ?? 0}");
+                        }
+                    }
+                }
+                
+                // 최종 저장
+                if (navMeshDataToSave != null && navMeshDataToSave.Length > 0)
+                {
+                    File.WriteAllBytes(fullPath, navMeshDataToSave);
+                    
+                    statusMessage = $"NavMesh 저장 완료: {fileName}";
+                    Debug.Log($"🎉 NavMesh 저장 성공!");
+                    Debug.Log($"📁 파일: {fullPath}");
+                    Debug.Log($"💾 크기: {navMeshDataToSave.Length} 바이트");
+                    Debug.Log($"🔍 파일 형식: {(fileName.EndsWith(".json") ? "JSON (디버그 메시 데이터)" : "바이너리 (NavMesh 데이터)")}");
+                }
+                else
+                {
+                    statusMessage = "NavMesh 저장 완전 실패";
+                    Debug.LogError("❌ 모든 방법으로 NavMesh 데이터를 얻는데 실패했습니다!");
+                    Debug.LogError("🔧 가능한 해결책:");
+                    Debug.LogError("   1. 먼저 'RecastDemo 검증된 설정' 버튼으로 NavMesh를 빌드하세요");
+                    Debug.LogError("   2. DLL이 올바르게 설치되었는지 확인하세요");
+                    Debug.LogError("   3. C++ 구현에서 dataSize 반환 문제를 수정하세요");
+                }
             }
-            
-            string fileName = $"NavMesh_Quick_{System.DateTime.Now:yyyyMMdd_HHmmss}.bytes";
-            string fullPath = Path.Combine(quickSavePath, fileName);
-            
-            // 실제로는 현재 로드된 NavMesh 데이터를 저장해야 함
-            Debug.Log($"NavMesh 저장: {fullPath}");
+            catch (System.Exception e)
+            {
+                statusMessage = $"NavMesh 저장 실패: {e.Message}";
+                Debug.LogError($"NavMesh 저장 중 오류 발생: {e.Message}");
+                Debug.LogError($"스택 트레이스: {e.StackTrace}");
+            }
         }
         
         void LoadNavMeshFromFile()
@@ -1434,6 +1570,156 @@ namespace RecastNavigation.Editor
             RecastNavigationComponent component = go.AddComponent<RecastNavigationComponent>();
             Debug.Log("RecastNavigationComponent가 생성되었습니다.");
             return component;
+        }
+        
+        /// <summary>
+        /// 현재 씬의 모든 메시를 수집하고 결합
+        /// </summary>
+        Mesh CollectSceneMeshes()
+        {
+            try
+            {
+                // 씬의 모든 MeshRenderer 수집
+                MeshRenderer[] renderers = FindObjectsOfType<MeshRenderer>();
+                if (renderers.Length == 0)
+                {
+                    Debug.LogWarning("씬에 MeshRenderer가 없습니다.");
+                    return null;
+                }
+                
+                Debug.Log($"씬에서 찾은 MeshRenderer 수: {renderers.Length}");
+                
+                // 모든 메시를 결합
+                Mesh combinedMesh = CombineAllMeshes(renderers);
+                if (combinedMesh != null)
+                {
+                    Debug.Log($"메시 결합 성공: {combinedMesh.vertexCount} 정점, {combinedMesh.triangles.Length/3} 삼각형");
+                }
+                else
+                {
+                    Debug.LogError("메시 결합 실패");
+                }
+                
+                return combinedMesh;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"씬 메시 수집 중 오류: {e.Message}");
+                return null;
+                         }
+         }
+         
+         /// <summary>
+         /// RecastDemo 검증된 설정 가져오기
+         /// </summary>
+         NavMeshBuildSettings GetRecastDemoSettings()
+         {
+             return NavMeshBuildSettingsExtensions.CreateRecastDemoVerified();
+         }
+        
+        NavMeshBuildResult BuildNavMeshFromCurrentScene()
+        {
+            Debug.Log("현재 씬에서 NavMesh 빌드 시작...");
+            
+            try
+            {
+                // 씬의 모든 MeshRenderer 수집
+                MeshRenderer[] renderers = FindObjectsOfType<MeshRenderer>();
+                if (renderers.Length == 0)
+                {
+                    Debug.LogWarning("씬에 MeshRenderer가 없습니다.");
+                    return new NavMeshBuildResult 
+                    { 
+                        Success = false, 
+                        ErrorMessage = "씬에 MeshRenderer가 없습니다" 
+                    };
+                }
+                
+                Debug.Log($"찾은 MeshRenderer 수: {renderers.Length}");
+                
+                // 모든 메시를 결합
+                Mesh combinedMesh = CombineAllMeshes(renderers);
+                if (combinedMesh == null)
+                {
+                    Debug.LogError("메시 결합 실패");
+                    return new NavMeshBuildResult 
+                    { 
+                        Success = false, 
+                        ErrorMessage = "메시 결합 실패" 
+                    };
+                }
+                
+                Debug.Log($"결합된 메시: {combinedMesh.vertexCount} 정점, {combinedMesh.triangles.Length/3} 삼각형");
+                
+                // NavMesh 빌드
+                var result = RecastNavigationWrapper.BuildNavMesh(combinedMesh, quickSettings);
+                
+                // 빌드 결과 상세 분석
+                Debug.Log($"=== NavMesh 빌드 결과 분석 ===");
+                Debug.Log($"Success: {result.Success}");
+                Debug.Log($"NavMeshData != null: {result.NavMeshData != null}");
+                if (result.NavMeshData != null)
+                {
+                    Debug.Log($"NavMeshData.Length: {result.NavMeshData.Length}");
+                }
+                else
+                {
+                    Debug.LogWarning("NavMeshData가 null입니다!");
+                }
+                Debug.Log($"ErrorMessage: {result.ErrorMessage ?? "없음"}");
+                
+                if (result.Success)
+                {
+                    Debug.Log("현재 씬에서 NavMesh 빌드 성공!");
+                    
+                    // NavMeshData 유효성 재검사
+                    if (result.NavMeshData == null)
+                    {
+                        Debug.LogError("빌드는 성공했지만 NavMeshData가 null입니다!");
+                        return new NavMeshBuildResult 
+                        { 
+                            Success = false, 
+                            ErrorMessage = "빌드는 성공했지만 NavMeshData가 null" 
+                        };
+                    }
+                    
+                    if (result.NavMeshData.Length == 0)
+                    {
+                        Debug.LogError("빌드는 성공했지만 NavMeshData가 비어있습니다!");
+                        return new NavMeshBuildResult 
+                        { 
+                            Success = false, 
+                            ErrorMessage = "빌드는 성공했지만 NavMeshData가 비어있음" 
+                        };
+                    }
+                    
+                    // NavMesh 로드 (isNavMeshLoaded 상태 업데이트)
+                    if (RecastNavigationWrapper.LoadNavMesh(result.NavMeshData))
+                    {
+                        isNavMeshLoaded = true;
+                        Debug.Log("빌드된 NavMesh 로드 완료");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("NavMesh 빌드는 성공했지만 로드에 실패했습니다.");
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"현재 씬에서 NavMesh 빌드 실패: {result.ErrorMessage}");
+                }
+                
+                return result;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"현재 씬에서 NavMesh 빌드 중 오류: {e.Message}");
+                return new NavMeshBuildResult 
+                { 
+                    Success = false, 
+                    ErrorMessage = e.Message 
+                };
+            }
         }
     }
 } 

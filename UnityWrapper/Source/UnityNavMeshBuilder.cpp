@@ -1279,9 +1279,10 @@ bool UnityNavMeshBuilder::IsParameterConfigurationValid(const UnityMeshData* mes
     float meshSizeX = bmax[0] - bmin[0];
     float meshSizeZ = bmax[2] - bmin[2];
     float minMeshSize = std::min(meshSizeX, meshSizeZ);
+    float meshArea = meshSizeX * meshSizeZ;
     
-    // walkableRadius가 메시 크기에 비해 너무 큰지 확인
-    float maxRecommendedRadius = minMeshSize * 0.25f; // 메시 크기의 25%까지 권장
+    // walkableRadius 검증 (더 관대한 기준)
+    float maxRecommendedRadius = minMeshSize * 0.1f; // 10%까지 허용 (이전: 25%)
     if (settings->walkableRadius > maxRecommendedRadius) {
         warning = "walkableRadius (" + std::to_string(settings->walkableRadius) + 
                  ") is too large for mesh size (" + std::to_string(minMeshSize) + 
@@ -1289,9 +1290,22 @@ bool UnityNavMeshBuilder::IsParameterConfigurationValid(const UnityMeshData* mes
         return false;
     }
     
-    // cellSize가 너무 크거나 작은지 확인
-    float minRecommendedCellSize = minMeshSize / 100.0f; // 최소 100개 셀
-    float maxRecommendedCellSize = minMeshSize / 10.0f;  // 최대 10개 셀
+    // cellSize 검증 (더 유연한 기준)
+    float minRecommendedCellSize, maxRecommendedCellSize;
+    
+    if (meshArea < 10.0f) {
+        // 작은 메시: 고해상도 허용
+        minRecommendedCellSize = minMeshSize / 500.0f; // 매우 정밀 허용
+        maxRecommendedCellSize = minMeshSize / 5.0f;   // 관대한 상한
+    } else if (meshArea < 100.0f) {
+        // 중간 메시
+        minRecommendedCellSize = minMeshSize / 200.0f;
+        maxRecommendedCellSize = minMeshSize / 10.0f;
+    } else {
+        // 큰 메시
+        minRecommendedCellSize = minMeshSize / 1000.0f; // 매우 정밀 허용
+        maxRecommendedCellSize = minMeshSize / 5.0f;    // 매우 관대한 상한
+    }
     
     if (settings->cellSize < minRecommendedCellSize) {
         warning = "cellSize (" + std::to_string(settings->cellSize) + 
@@ -1305,9 +1319,9 @@ bool UnityNavMeshBuilder::IsParameterConfigurationValid(const UnityMeshData* mes
         return false;
     }
     
-    // walkableRadius와 cellSize의 비율 확인
+    // walkableRadius와 cellSize의 비율 확인 (더 유연한 기준)
     int walkableRadiusCells = static_cast<int>(settings->walkableRadius / settings->cellSize);
-    if (walkableRadiusCells >= 5) {
+    if (walkableRadiusCells >= 10) { // 10 cells까지 허용 (이전: 5)
         warning = "walkableRadius to cellSize ratio is too high (" + std::to_string(walkableRadiusCells) + 
                  " cells). This may cause excessive erosion.";
         return false;
@@ -1332,55 +1346,53 @@ void UnityNavMeshBuilder::AdjustParametersForMesh(const UnityMeshData* meshData,
     UNITY_LOG_INFO("  - Area: %.3f square meters", meshArea);
     UNITY_LOG_INFO("  - Min dimension: %.3f", minMeshSize);
     
-    // 1. Improved cellSize calculation for precise NavMesh
+    // 1. 메시 크기별 적응적 cellSize 계산
     float originalCellSize = settings->cellSize;
+    float targetCellSize;
     
-    // The real issue: DetailMesh triangle count is much lower than expected
-    // Let's calculate based on ACTUAL triangle density we want
-    float targetTriangleDensity = 1.0f; // 1 triangle per square meter (reasonable for 50x50)
-    float targetTriangles = meshArea * targetTriangleDensity;
-    
-    // Calculate cellSize based on realistic expectations
-    // Each cell typically produces 1-2 triangles in DetailMesh
-    float expectedTrianglesPerCell = 1.5f;
-    float requiredCells = targetTriangles / expectedTrianglesPerCell;
-    float targetCellSize = std::sqrt(meshArea / requiredCells);
-    
-    // Apply safety limits
-    float minCellSize = minMeshSize / 200.0f; // More precise: 1/200 of mesh size  
-    float maxCellSize = minMeshSize / 50.0f;  // Less restrictive: 1/50 of mesh size
-    targetCellSize = std::max(targetCellSize, minCellSize);
-    targetCellSize = std::min(targetCellSize, maxCellSize);
-    
-    UNITY_LOG_INFO("Target triangle calculation:");
-    UNITY_LOG_INFO("  - Target density: %.1f triangles/m²", targetTriangleDensity);
-    UNITY_LOG_INFO("  - Target total triangles: %.0f", targetTriangles);
-    UNITY_LOG_INFO("  - Expected triangles per cell: %.1f", expectedTrianglesPerCell);
-    UNITY_LOG_INFO("  - Required cells: %.0f", requiredCells);
-    UNITY_LOG_INFO("  - Calculated cellSize: %.3f", targetCellSize);
-    UNITY_LOG_INFO("  - Cell limits: min=%.3f, max=%.3f", minCellSize, maxCellSize);
-    
-    if (std::abs(settings->cellSize - targetCellSize) > targetCellSize * 0.1f) { // 10% tolerance
-        settings->cellSize = targetCellSize;
-        UNITY_LOG_INFO("  Adjusted cellSize: %.3f -> %.3f", originalCellSize, settings->cellSize);
-        
-        // Calculate actual grid size and expected results
-        int gridWidth = static_cast<int>((meshSizeX / settings->cellSize) + 0.5f);
-        int gridHeight = static_cast<int>((meshSizeZ / settings->cellSize) + 0.5f);
-        int actualCells = gridWidth * gridHeight;
-        float expectedDetailTriangles = actualCells * expectedTrianglesPerCell;
-        
-        UNITY_LOG_INFO("    Grid size: %d x %d = %d cells", gridWidth, gridHeight, actualCells);
-        UNITY_LOG_INFO("    Expected DetailMesh triangles: %.0f", expectedDetailTriangles);
+    if (meshArea < 10.0f) {
+        // 작은 메시 (10m² 미만): 고해상도 필요
+        targetCellSize = std::min(0.05f, minMeshSize / 20.0f);
+        UNITY_LOG_INFO("Small mesh detected - using high resolution");
+    } else if (meshArea < 100.0f) {
+        // 중간 메시 (10-100m²): 중간 해상도
+        targetCellSize = std::min(0.1f, minMeshSize / 50.0f);
+        UNITY_LOG_INFO("Medium mesh detected - using medium resolution");
     } else {
-        UNITY_LOG_INFO("  cellSize unchanged: %.3f (within tolerance)", settings->cellSize);
+        // 큰 메시 (100m² 이상): 적응적 해상도
+        float targetTriangleDensity = 0.5f; // 0.5 triangles/m² (더 높은 밀도)
+        float targetTriangles = meshArea * targetTriangleDensity;
+        float expectedTrianglesPerCell = 2.0f; // 더 현실적인 추정
+        float requiredCells = targetTriangles / expectedTrianglesPerCell;
+        targetCellSize = std::sqrt(meshArea / requiredCells);
+        
+        // 범위 제한 (더 엄격한 제한)
+        float minCellSize = minMeshSize / 300.0f; // 더 정밀
+        float maxCellSize = minMeshSize / 20.0f;  // 더 제한적
+        targetCellSize = std::max(targetCellSize, minCellSize);
+        targetCellSize = std::min(targetCellSize, maxCellSize);
+        
+        UNITY_LOG_INFO("Large mesh detected - using adaptive resolution");
+        UNITY_LOG_INFO("  - Target density: %.1f triangles/m²", targetTriangleDensity);
+        UNITY_LOG_INFO("  - Target triangles: %.0f", targetTriangles);
+        UNITY_LOG_INFO("  - Cell limits: min=%.3f, max=%.3f", minCellSize, maxCellSize);
     }
     
-    // 2. Adjust walkableRadius to solve erosion issues
-    float originalWalkableRadius = settings->walkableRadius;
+    settings->cellSize = targetCellSize;
+    UNITY_LOG_INFO("  Adjusted cellSize: %.3f -> %.3f", originalCellSize, settings->cellSize);
     
-    // Make walkableRadius more conservative for better results
-    float maxSafeRadius = minMeshSize * 0.01f; // Even more conservative: 1% of mesh size
+    // 계산된 그리드 정보 표시
+    int gridWidth = static_cast<int>((meshSizeX / settings->cellSize) + 0.5f);
+    int gridHeight = static_cast<int>((meshSizeZ / settings->cellSize) + 0.5f);
+    int actualCells = gridWidth * gridHeight;
+    float expectedDetailTriangles = actualCells * 2.0f;
+    
+    UNITY_LOG_INFO("    Grid size: %d x %d = %d cells", gridWidth, gridHeight, actualCells);
+    UNITY_LOG_INFO("    Expected DetailMesh triangles: %.0f", expectedDetailTriangles);
+    
+    // 2. walkableRadius 조정 (매우 보수적)
+    float originalWalkableRadius = settings->walkableRadius;
+    float maxSafeRadius = minMeshSize * 0.01f; // 1% of mesh size (매우 보수적)
     
     if (settings->walkableRadius > maxSafeRadius) {
         settings->walkableRadius = maxSafeRadius;
@@ -1389,59 +1401,53 @@ void UnityNavMeshBuilder::AdjustParametersForMesh(const UnityMeshData* meshData,
         UNITY_LOG_INFO("    Reason: Prevent excessive area removal during erosion");
     }
     
-    // 3. Ensure walkableRadius to cellSize ratio is very conservative
+    // 3. walkableRadius를 cellSize 기준으로 제한
     int walkableRadiusCells = static_cast<int>(settings->walkableRadius / settings->cellSize + 0.5f);
-    if (walkableRadiusCells > 1) { // Limit to max 1 cell (very conservative)
-        settings->walkableRadius = settings->cellSize * 1.0f;
-        UNITY_LOG_INFO("  Adjusted walkableRadius ratio: %.3f -> %.3f (max 1 cell)", 
+    if (walkableRadiusCells > 0) { // 최대 0 cells (erosion 없음)
+        settings->walkableRadius = settings->cellSize * 0.5f; // Half cell
+        walkableRadiusCells = 0;
+        UNITY_LOG_INFO("  Further reduced walkableRadius: %.3f -> %.3f (0 cells - no erosion)", 
                        originalWalkableRadius, settings->walkableRadius);
-        walkableRadiusCells = 1;
-    }
-    if (walkableRadiusCells == 0) {
-        settings->walkableRadius = settings->cellSize * 0.5f; // Minimum half cell
-        walkableRadiusCells = 0; // This means 0 cell erosion
-        UNITY_LOG_INFO("  Walkable radius too small, set to half cell: %.3f", settings->walkableRadius);
     }
     
     UNITY_LOG_INFO("  Cell ratio: walkableRadius = %d cells", walkableRadiusCells);
     
-    // 4. Adjust minRegionArea to be more inclusive
-    float cellArea = settings->cellSize * settings->cellSize;
-    float totalCells = meshArea / cellArea;
+    // 4. minRegionArea를 매우 작게 조정
     float originalMinRegionArea = settings->minRegionArea;
+    float targetMinRegionArea;
     
-    // Much more inclusive region area - allow very small regions
-    float targetMinRegionArea = std::max(0.1f, totalCells / 1000.0f); // 0.1% of total cells
-    if (settings->minRegionArea > targetMinRegionArea) {
-        settings->minRegionArea = targetMinRegionArea;
-        UNITY_LOG_INFO("  Adjusted minRegionArea: %.1f -> %.1f (0.1%% of total cells)", 
-                       originalMinRegionArea, settings->minRegionArea);
+    if (meshArea < 10.0f) {
+        // 작은 메시: 거의 모든 region 허용
+        targetMinRegionArea = 1.0f; // 최소 1개 cell
+    } else {
+        // 큰 메시: 0.01% of total cells
+        float cellArea = settings->cellSize * settings->cellSize;
+        float totalCells = meshArea / cellArea;
+        targetMinRegionArea = std::max(1.0f, totalCells / 10000.0f);
     }
     
-    // 5. Enhanced DetailMesh quality prediction
+    settings->minRegionArea = targetMinRegionArea;
+    UNITY_LOG_INFO("  Adjusted minRegionArea: %.1f -> %.1f", 
+                   originalMinRegionArea, settings->minRegionArea);
+    
+    // 5. 품질 예측 (개선된)
     UNITY_LOG_INFO("Detailed NavMesh Generation Prediction:");
-    int actualGridWidth = static_cast<int>((meshSizeX / settings->cellSize) + 0.5f);
-    int actualGridHeight = static_cast<int>((meshSizeZ / settings->cellSize) + 0.5f);
-    int actualTotalCells = actualGridWidth * actualGridHeight;
-    float predictedPolyMeshTriangles = actualTotalCells * 1.0f; // Conservative estimate
-    float predictedDetailMeshTriangles = actualTotalCells * 1.5f; // More conservative
-    
-    UNITY_LOG_INFO("  - Actual grid: %d x %d = %d cells", actualGridWidth, actualGridHeight, actualTotalCells);
+    UNITY_LOG_INFO("  - Actual grid: %d x %d = %d cells", gridWidth, gridHeight, actualCells);
+    float cellArea = settings->cellSize * settings->cellSize;
     UNITY_LOG_INFO("  - Cell area: %.6f m²", cellArea);
-    UNITY_LOG_INFO("  - Predicted PolyMesh triangles: %.0f", predictedPolyMeshTriangles);
-    UNITY_LOG_INFO("  - Predicted DetailMesh triangles: %.0f", predictedDetailMeshTriangles);
+    UNITY_LOG_INFO("  - Predicted PolyMesh triangles: %d", actualCells);
+    UNITY_LOG_INFO("  - Predicted DetailMesh triangles: %.0f", expectedDetailTriangles);
     
-    // Quality warnings based on realistic expectations
-    if (predictedDetailMeshTriangles < 100) {
-        UNITY_LOG_WARNING("  WARNING: Very low triangle count predicted (%.0f)", predictedDetailMeshTriangles);
-        UNITY_LOG_WARNING("    NavMesh may be too coarse for accurate pathfinding");
-        UNITY_LOG_WARNING("    Consider decreasing cellSize");
-    } else if (predictedDetailMeshTriangles > 5000) {
-        UNITY_LOG_WARNING("  WARNING: Very high triangle count predicted (%.0f)", predictedDetailMeshTriangles);
+    // 품질 평가 (더 엄격한 기준)
+    float expectedDensity = expectedDetailTriangles / meshArea;
+    if (expectedDensity < 0.1f) {
+        UNITY_LOG_WARNING("  WARNING: Very low triangle density predicted (%.2f/m²)", expectedDensity);
+        UNITY_LOG_WARNING("    Consider decreasing cellSize further");
+    } else if (expectedDensity > 2.0f) {
+        UNITY_LOG_WARNING("  WARNING: Very high triangle density predicted (%.2f/m²)", expectedDensity);
         UNITY_LOG_WARNING("    May impact performance");
-        UNITY_LOG_WARNING("    Consider increasing cellSize");
     } else {
-        UNITY_LOG_INFO("  OK: Triangle count should be appropriate (%.0f triangles)", predictedDetailMeshTriangles);
+        UNITY_LOG_INFO("  OK: Triangle density should be appropriate (%.2f/m²)", expectedDensity);
     }
     
     UNITY_LOG_INFO("=== Final Adjusted Parameters ===");
@@ -1449,6 +1455,7 @@ void UnityNavMeshBuilder::AdjustParametersForMesh(const UnityMeshData* meshData,
     UNITY_LOG_INFO("walkableRadius: %.3f", settings->walkableRadius);
     UNITY_LOG_INFO("walkableHeight: %.3f", settings->walkableHeight);
     UNITY_LOG_INFO("minRegionArea: %.1f", settings->minRegionArea);
+    UNITY_LOG_INFO("Parameters successfully adjusted!");
 }
 
 void UnityNavMeshBuilder::AnalyzeNavMeshQuality(const UnityMeshData* meshData, const UnityNavMeshBuildSettings* settings) {
