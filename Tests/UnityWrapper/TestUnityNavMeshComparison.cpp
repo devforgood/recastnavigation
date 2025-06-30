@@ -513,6 +513,12 @@ TEST_CASE("Obj NavMesh Comparison Only", "[NavMeshComparison]") {
     unityMeshData.vertexCount = static_cast<int>(objMesh.vertices.size()) / 3;
     unityMeshData.indexCount = static_cast<int>(objMesh.indices.size());
     UnityNavMeshResult unityResult = unityBuilder.BuildNavMesh(&unityMeshData, &unitySettings);
+    if (!unityResult.success) {
+        INFO("Unity BuildNavMesh failed");
+        if (unityResult.errorMessage) {
+            INFO(unityResult.errorMessage);
+        }
+    }
     REQUIRE(unityResult.success == true);
 
     RecastDemoNavMeshBuilder recastBuilder;
