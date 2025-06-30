@@ -8,7 +8,7 @@ cd build
 
 REM CMake 설정 (테스트 포함)
 echo CMake 설정 중...
-cmake .. -G "Visual Studio 16 2019" -A x64 -DRECASTNAVIGATION_UNITY=ON -DRECASTNAVIGATION_TESTS=ON
+cmake .. -G "Visual Studio 17 2022" -A x64 -DRECASTNAVIGATION_UNITY=ON -DRECASTNAVIGATION_TESTS=ON
 if %ERRORLEVEL% neq 0 (
     echo CMake 설정 실패!
     pause

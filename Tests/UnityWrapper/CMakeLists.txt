@@ -11,6 +11,7 @@ add_executable(UnityWrapperTests
     TestUnityRecastWrapper.cpp
     TestUnityNavMeshBuilder.cpp
     TestUnityPathfinding.cpp
+    TestUnityNavMeshComparison.cpp
     ${CMAKE_SOURCE_DIR}/Tests/Contrib/catch2/catch_amalgamated.cpp
 )
 
@@ -58,10 +59,11 @@ set_target_properties(UnityWrapperTests PROPERTIES
 
 # DLL을 실행 폴더로 복사하는 post-build 명령 추가
 if(WIN32)
+    # Debug와 Release 모두에 대해 DLL 복사 설정
     add_custom_command(TARGET UnityWrapperTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_BINARY_DIR}/UnityPlugins/Windows/x64/Debug/UnityWrapper.dll"
-        "${CMAKE_BINARY_DIR}/Tests/Debug/UnityWrapper.dll"
+        "$<TARGET_FILE_DIR:UnityWrapper>/UnityWrapper.dll"
+        "$<TARGET_FILE_DIR:UnityWrapperTests>/UnityWrapper.dll"
         COMMENT "Copying UnityWrapper.dll to test output directory"
     )
 endif() 

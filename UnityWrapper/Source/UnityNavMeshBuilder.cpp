@@ -335,6 +335,11 @@ int UnityNavMeshBuilder::GetPolyCount() const {
         return 0;
     }
     
+    // PolyMesh에서 폴리곤 개수 반환 (우선순위)
+    if (m_pmesh && m_pmesh->npolys > 0) {
+        return m_pmesh->npolys;
+    }
+    
     // 실제 NavMesh에서 폴리곤 개수 반환
     if (m_navMesh) {
         const dtNavMesh* navMesh = m_navMesh.get();
@@ -350,11 +355,6 @@ int UnityNavMeshBuilder::GetPolyCount() const {
         return totalPolys;
     }
     
-    // PolyMesh에서 폴리곤 개수 반환
-    if (m_pmesh && m_pmesh->npolys > 0) {
-        return m_pmesh->npolys;
-    }
-    
     return 0;
 }
 
@@ -362,6 +362,11 @@ int UnityNavMeshBuilder::GetVertexCount() const {
     // 생성자에서 호출된 경우 0 반환
     if (!m_navMesh && !m_pmesh) {
         return 0;
+    }
+    
+    // PolyMesh에서 버텍스 개수 반환 (우선순위)
+    if (m_pmesh && m_pmesh->nverts > 0) {
+        return m_pmesh->nverts;
     }
     
     // 실제 NavMesh에서 버텍스 개수 반환
@@ -377,11 +382,6 @@ int UnityNavMeshBuilder::GetVertexCount() const {
         }
         
         return totalVerts;
-    }
-    
-    // PolyMesh에서 버텍스 개수 반환
-    if (m_pmesh && m_pmesh->nverts > 0) {
-        return m_pmesh->nverts;
     }
     
     return 0;

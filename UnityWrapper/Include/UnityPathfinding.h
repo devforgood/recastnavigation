@@ -9,51 +9,51 @@ public:
     UnityPathfinding();
     ~UnityPathfinding();
     
-    // NavMesh 설정
+    // NavMesh settings
     void SetNavMesh(dtNavMesh* navMesh, dtNavMeshQuery* navMeshQuery);
     
-    // 경로 찾기
+    // Pathfinding
     UnityPathResult FindPath(
         float startX, float startY, float startZ,
         float endX, float endY, float endZ
     );
     
-    // 경로 스무딩
+    // Path smoothing
     UnityPathResult SmoothPath(const UnityPathResult* path, float maxSmoothDistance);
     
-    // 경로 단순화
+    // Path simplification
     UnityPathResult SimplifyPath(const UnityPathResult* path, float tolerance);
     
-    // 경로 검증
+    // Path validation
     bool ValidatePath(const UnityPathResult* path);
     
-    // 경로 길이 계산
+    // Path length calculation
     float CalculatePathLength(const UnityPathResult* path);
     
-    // 경로 포인트 수 계산
+    // Path point count calculation
     int GetPathPointCount(const UnityPathResult* path);
     
-    // 경로 포인트 가져오기
+    // Get path point
     bool GetPathPoint(const UnityPathResult* path, int index, float* x, float* y, float* z);
     
-    // 경로 방향 벡터 계산
+    // Calculate path direction vector
     bool GetPathDirection(const UnityPathResult* path, int index, float* dirX, float* dirY, float* dirZ);
     
-    // 경로 곡률 계산
+    // Calculate path curvature
     float GetPathCurvature(const UnityPathResult* path, int index);
     
 private:
-    // NavMesh 쿼리 객체
+    // NavMesh query object
     dtNavMeshQuery* m_navMeshQuery;
     
-    // 경로 찾기 설정
+    // Pathfinding settings
     dtQueryFilter m_filter;
     
-    // 경로 찾기 결과
+    // Pathfinding results
     std::vector<dtPolyRef> m_pathPolys;
     std::vector<float> m_pathPoints;
     
-    // 유틸리티 함수
+    // Utility functions
     bool FindNearestPoly(float x, float y, float z, dtPolyRef& polyRef, float* nearestPt);
     bool Raycast(float startX, float startY, float startZ, float endX, float endY, float endZ, float* hitPoint);
     void SmoothPathPoints(const std::vector<float>& input, std::vector<float>& output, float maxSmoothDistance);

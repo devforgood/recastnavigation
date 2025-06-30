@@ -51,7 +51,7 @@ public:
     ~UnityLogger();
     static UnityLogger& GetInstance();
     
-    // 초기화 및 설정
+    // Initialization and settings
     bool Initialize(const std::string& filePath = "UnityWrapper.log", 
                    UnityLogLevel level = UnityLogLevel::INFO,
                    UnityLogOutput output = UnityLogOutput::BOTH);
@@ -59,29 +59,29 @@ public:
     void SetOutput(UnityLogOutput output);
     void SetLogFilePath(const std::string& filePath);
     
-    // 로깅 함수들
+    // Logging functions
     void Log(UnityLogLevel level, const std::string& message);
     void Log(UnityLogLevel level, const char* format, ...);
     
-    // 편의 함수들
+    // Convenience functions
     void Debug(const std::string& message);
     void Info(const std::string& message);
     void Warning(const std::string& message);
     void Error(const std::string& message);
     void Critical(const std::string& message);
     
-    // 가변 인자 지원
+    // Variable argument support
     void Debug(const char* format, ...);
     void Info(const char* format, ...);
     void Warning(const char* format, ...);
     void Error(const char* format, ...);
     void Critical(const char* format, ...);
     
-    // 정리
+    // Cleanup
     void Shutdown();
 };
 
-// 매크로 정의 (기존 cout 대체용)
+// Macro definitions (replacement for cout)
 #ifdef _DEBUG
     #define UNITY_LOG_DEBUG(...) UnityLogger::GetInstance().Debug(__VA_ARGS__)
     #define UNITY_LOG_INFO(...) UnityLogger::GetInstance().Info(__VA_ARGS__)
@@ -96,23 +96,23 @@ public:
     #define UNITY_LOG_CRITICAL(...) UnityLogger::GetInstance().Critical(__VA_ARGS__)
 #endif
 
-// C 스타일 인터페이스 (Unity에서 호출 가능)
+// C-style interface (callable from Unity)
 extern "C" {
-    // 로깅 시스템 초기화
+    // Logging system initialization
     UNITY_API bool UnityLog_Initialize(const char* logFilePath, int logLevel, int output);
     
-    // 로깅 함수들
+    // Logging functions
     UNITY_API void UnityLog_Debug(const char* format, ...);
     UNITY_API void UnityLog_Info(const char* format, ...);
     UNITY_API void UnityLog_Warning(const char* format, ...);
     UNITY_API void UnityLog_Error(const char* format, ...);
     UNITY_API void UnityLog_Critical(const char* format, ...);
     
-    // 설정 함수들
+    // Settings functions
     UNITY_API void UnityLog_SetLevel(int level);
     UNITY_API void UnityLog_SetOutput(int output);
     UNITY_API void UnityLog_SetFilePath(const char* filePath);
     
-    // 정리
+    // Cleanup
     UNITY_API void UnityLog_Shutdown();
 } 
