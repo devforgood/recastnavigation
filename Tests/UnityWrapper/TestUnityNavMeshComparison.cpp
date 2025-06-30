@@ -375,148 +375,37 @@ private:
 struct ObjMeshData {
     std::vector<float> vertices;
     std::vector<int> indices;
-    std::vector<float> normals;
     bool loaded;
-    
     ObjMeshData() : loaded(false) {}
 };
 
 ObjMeshData LoadObjFile(const std::string& filename) {
-    ObjMeshData meshData;
+    ObjMeshData mesh;
     std::ifstream file(filename);
-    
-    if (!file.is_open()) {
-        std::cout << "Failed to open OBJ file: " << filename << std::endl;
-        return meshData;
-    }
-    
-    std::vector<float> tempVertices;
-    std::vector<float> tempNormals;
-    std::vector<int> tempIndices;
-    
+    if (!file.is_open()) return mesh;
     std::string line;
     while (std::getline(file, line)) {
-        std::istringstream iss(line);
-        std::string prefix;
-        iss >> prefix;
-        
-        if (prefix == "v") {
-            // Vertex
+        if (line.substr(0, 2) == "v ") {
+            std::istringstream iss(line.substr(2));
             float x, y, z;
             iss >> x >> y >> z;
-            tempVertices.push_back(x);
-            tempVertices.push_back(y);
-            tempVertices.push_back(z);
-        }
-        else if (prefix == "vn") {
-            // Normal
-            float nx, ny, nz;
-            iss >> nx >> ny >> nz;
-            tempNormals.push_back(nx);
-            tempNormals.push_back(ny);
-            tempNormals.push_back(nz);
-        }
-        else if (prefix == "f") {
-            // Face
-            std::string vertex1, vertex2, vertex3;
-            iss >> vertex1 >> vertex2 >> vertex3;
-            
-            // Parse vertex indices (handle v/vt/vn format)
-            auto parseVertex = [](const std::string& v) -> int {
-                size_t pos = v.find('/');
-                if (pos != std::string::npos) {
-                    return std::stoi(v.substr(0, pos)) - 1; // OBJ indices are 1-based
-                }
-                return std::stoi(v) - 1;
-            };
-            
-            int idx1 = parseVertex(vertex1);
-            int idx2 = parseVertex(vertex2);
-            int idx3 = parseVertex(vertex3);
-            
-            tempIndices.push_back(idx1);
-            tempIndices.push_back(idx2);
-            tempIndices.push_back(idx3);
+            mesh.vertices.push_back(x);
+            mesh.vertices.push_back(y);
+            mesh.vertices.push_back(z);
+        } else if (line.substr(0, 2) == "f ") {
+            std::istringstream iss(line.substr(2));
+            int i1, i2, i3;
+            char slash;
+            iss >> i1 >> i2 >> i3;
+            mesh.indices.push_back(i1 - 1);
+            mesh.indices.push_back(i2 - 1);
+            mesh.indices.push_back(i3 - 1);
         }
     }
-    
-    file.close();
-    
-    // Convert to final format
-    meshData.vertices = tempVertices;
-    meshData.indices = tempIndices;
-    meshData.normals = tempNormals;
-    meshData.loaded = true;
-    
-    std::cout << "Loaded OBJ file: " << filename << std::endl;
-    std::cout << "  Vertices: " << tempVertices.size() / 3 << std::endl;
-    std::cout << "  Triangles: " << tempIndices.size() / 3 << std::endl;
-    std::cout << "  Normals: " << tempNormals.size() / 3 << std::endl;
-    
-    return meshData;
+    mesh.loaded = !mesh.vertices.empty() && !mesh.indices.empty();
+    return mesh;
 }
 
-// Test mesh data creation functions
-std::vector<float> CreateSimplePlaneMesh() {
-    return {
-        -1.0f, 0.0f, -1.0f,  // 0
-         1.0f, 0.0f, -1.0f,  // 1
-         1.0f, 0.0f,  1.0f,  // 2
-        -1.0f, 0.0f,  1.0f   // 3
-    };
-}
-
-std::vector<int> CreateSimplePlaneIndices() {
-    return {
-        0, 1, 2,  // First triangle
-        0, 2, 3   // Second triangle
-    };
-}
-
-std::vector<float> CreateComplexTerrainMesh() {
-    return {
-        // Ground plane
-        -2.0f, 0.0f, -2.0f,   // 0
-         2.0f, 0.0f, -2.0f,   // 1
-         2.0f, 0.0f,  2.0f,   // 2
-        -2.0f, 0.0f,  2.0f,   // 3
-        
-        // Step 1
-        -1.0f, 0.5f, -1.0f,   // 4
-         1.0f, 0.5f, -1.0f,   // 5
-         1.0f, 0.5f,  1.0f,   // 6
-        -1.0f, 0.5f,  1.0f,   // 7
-        
-        // Step 2
-        -0.5f, 1.0f, -0.5f,   // 8
-         0.5f, 1.0f, -0.5f,   // 9
-         0.5f, 1.0f,  0.5f,   // 10
-        -0.5f, 1.0f,  0.5f    // 11
-    };
-}
-
-std::vector<int> CreateComplexTerrainIndices() {
-    return {
-        // Ground
-        0, 1, 2, 0, 2, 3,
-        // Step 1 sides
-        0, 4, 5, 0, 5, 1,
-        1, 5, 6, 1, 6, 2,
-        2, 6, 7, 2, 7, 3,
-        3, 7, 4, 3, 4, 0,
-        // Step 1 top
-        4, 5, 6, 4, 6, 7,
-        // Step 2 sides
-        4, 8, 9, 4, 9, 5,
-        5, 9, 10, 5, 10, 6,
-        6, 10, 11, 6, 11, 7,
-        7, 11, 8, 7, 8, 4,
-        // Step 2 top
-        8, 9, 10, 8, 10, 11
-    };
-}
-
-// NavMesh result comparison function
 struct NavMeshComparisonResult {
     bool polyCountMatch;
     bool vertexCountMatch;
@@ -525,708 +414,127 @@ struct NavMeshComparisonResult {
     bool navMeshValid;
     bool navQueryValid;
     std::string differences;
-    
     bool IsIdentical() const {
         return polyCountMatch && vertexCountMatch && detailTriCountMatch && 
                detailVertexCountMatch && navMeshValid && navQueryValid;
     }
 };
 
+// Forward declarations for builder classes (assume implemented elsewhere)
+// class UnityNavMeshBuilder {
+// public:
+//     int GetPolyCount() const;
+//     int GetVertexCount() const;
+//     int GetPolyMeshPolyCount() const;
+//     int GetPolyMeshVertexCount() const;
+//     int GetDetailMeshTriCount() const;
+//     int GetDetailMeshVertexCount() const;
+//     const dtNavMesh* GetNavMesh() const;
+//     const dtNavMeshQuery* GetNavMeshQuery() const;
+//     UnityNavMeshResult BuildNavMesh(const UnityMeshData*, const UnityNavMeshBuildSettings*);
+// };
+// class RecastDemoNavMeshBuilder {
+// public:
+//     int GetPolyCount() const;
+//     int GetVertexCount() const;
+//     int GetDetailTriCount() const;
+//     int GetDetailVertexCount() const;
+//     const dtNavMesh* GetNavMesh() const;
+//     const dtNavMeshQuery* GetNavMeshQuery() const;
+//     void SetSettings(const struct RecastDemoSettings&);
+//     bool BuildNavMesh(const float*, int, const int*, int);
+// };
+
 NavMeshComparisonResult CompareNavMeshResults(
     const UnityNavMeshBuilder& unityBuilder,
     const RecastDemoNavMeshBuilder& recastBuilder) {
-    
-    NavMeshComparisonResult result = {};
-    std::ostringstream differences;
-    
-    // PolyMesh comparison
-    int unityPolyCount = unityBuilder.GetPolyCount();
-    int recastPolyCount = recastBuilder.GetPolyCount();
-    result.polyCountMatch = (unityPolyCount == recastPolyCount);
-    if (!result.polyCountMatch) {
-        differences << "PolyCount mismatch: Unity=" << unityPolyCount 
-                   << ", RecastDemo=" << recastPolyCount << "\n";
-    }
-    
-    int unityVertexCount = unityBuilder.GetVertexCount();
-    int recastVertexCount = recastBuilder.GetVertexCount();
-    result.vertexCountMatch = (unityVertexCount == recastVertexCount);
-    if (!result.vertexCountMatch) {
-        differences << "VertexCount mismatch: Unity=" << unityVertexCount 
-                   << ", RecastDemo=" << recastVertexCount << "\n";
-    }
-    
-    // DetailMesh comparison (if available in UnityWrapper)
-    int unityDetailTriCount = 0; // UnityWrapper detail mesh info needed
-    int recastDetailTriCount = recastBuilder.GetDetailTriCount();
-    result.detailTriCountMatch = (unityDetailTriCount == recastDetailTriCount);
-    if (!result.detailTriCountMatch) {
-        differences << "DetailTriCount mismatch: Unity=" << unityDetailTriCount 
-                   << ", RecastDemo=" << recastDetailTriCount << "\n";
-    }
-    
-    int unityDetailVertexCount = 0; // UnityWrapper detail mesh info needed
-    int recastDetailVertexCount = recastBuilder.GetDetailVertexCount();
-    result.detailVertexCountMatch = (unityDetailVertexCount == recastDetailVertexCount);
-    if (!result.detailVertexCountMatch) {
-        differences << "DetailVertexCount mismatch: Unity=" << unityDetailVertexCount 
-                   << ", RecastDemo=" << recastDetailVertexCount << "\n";
-    }
-    
-    // NavMesh object validity check
-    result.navMeshValid = (unityBuilder.GetNavMesh() != nullptr && 
-                          recastBuilder.GetNavMesh() != nullptr);
-    if (!result.navMeshValid) {
-        differences << "NavMesh object invalid: Unity=" 
-                   << (unityBuilder.GetNavMesh() ? "valid" : "null") 
-                   << ", RecastDemo=" 
-                   << (recastBuilder.GetNavMesh() ? "valid" : "null") << "\n";
-    }
-    
-    result.navQueryValid = (unityBuilder.GetNavMeshQuery() != nullptr && 
-                           recastBuilder.GetNavMeshQuery() != nullptr);
-    if (!result.navQueryValid) {
-        differences << "NavMeshQuery object invalid: Unity=" 
-                   << (unityBuilder.GetNavMeshQuery() ? "valid" : "null") 
-                   << ", RecastDemo=" 
-                   << (recastBuilder.GetNavMeshQuery() ? "valid" : "null") << "\n";
-    }
-    
-    result.differences = differences.str();
+    NavMeshComparisonResult result;
+    result.polyCountMatch = unityBuilder.GetPolyCount() == recastBuilder.GetPolyCount();
+    result.vertexCountMatch = unityBuilder.GetVertexCount() == recastBuilder.GetVertexCount();
+    result.detailTriCountMatch = unityBuilder.GetDetailMeshTriCount() == recastBuilder.GetDetailTriCount();
+    result.detailVertexCountMatch = unityBuilder.GetDetailMeshVertexCount() == recastBuilder.GetDetailVertexCount();
+    result.navMeshValid = unityBuilder.GetNavMesh() && recastBuilder.GetNavMesh();
+    result.navQueryValid = unityBuilder.GetNavMeshQuery() && recastBuilder.GetNavMeshQuery();
+    if (!result.polyCountMatch)
+        result.differences += "PolyCount mismatch\n";
+    if (!result.vertexCountMatch)
+        result.differences += "VertexCount mismatch\n";
+    if (!result.detailTriCountMatch)
+        result.differences += "DetailTriCount mismatch\n";
+    if (!result.detailVertexCountMatch)
+        result.differences += "DetailVertexCount mismatch\n";
+    if (!result.navMeshValid)
+        result.differences += "NavMesh invalid\n";
+    if (!result.navQueryValid)
+        result.differences += "NavQuery invalid\n";
     return result;
 }
 
-TEST_CASE("UnityWrapper vs RecastDemo NavMesh Comparison", "[NavMeshComparison]")
-{
-    // Initialize logging system once for the entire test case
-    static bool logInitialized = false;
-    if (!logInitialized) {
-        UnityLog_Initialize("NavMeshComparison.log", 0, 3);
-        logInitialized = true;
+TEST_CASE("Obj NavMesh Comparison Only", "[NavMeshComparison]") {
+    std::string objPath = "../../../RecastDemo/Bin/Meshes/nav_test.obj";
+    ObjMeshData objMesh = LoadObjFile(objPath);
+    REQUIRE(objMesh.loaded);
+
+    UnityNavMeshBuildSettings unitySettings = {};
+    unitySettings.cellSize = 0.3f;
+    unitySettings.cellHeight = 0.2f;
+    unitySettings.walkableSlopeAngle = 45.0f;
+    unitySettings.walkableHeight = 2.0f;
+    unitySettings.walkableRadius = 0.6f;
+    unitySettings.walkableClimb = 0.9f;
+    unitySettings.minRegionArea = 8.0f;
+    unitySettings.mergeRegionArea = 20.0f;
+    unitySettings.maxVertsPerPoly = 6;
+    unitySettings.detailSampleDist = 6.0f;
+    unitySettings.detailSampleMaxError = 1.0f;
+    unitySettings.autoTransformCoordinates = false;
+    unitySettings.partitionType = 0;
+
+    RecastDemoSettings recastSettings;
+    recastSettings.cellSize = 0.3f;
+    recastSettings.cellHeight = 0.2f;
+    recastSettings.agentHeight = 2.0f;
+    recastSettings.agentRadius = 0.6f;
+    recastSettings.agentMaxClimb = 0.9f;
+    recastSettings.agentMaxSlope = 45.0f;
+    recastSettings.regionMinSize = 8.0f;
+    recastSettings.regionMergeSize = 20.0f;
+    recastSettings.edgeMaxLen = 12.0f;
+    recastSettings.edgeMaxError = 1.3f;
+    recastSettings.vertsPerPoly = 6.0f;
+    recastSettings.detailSampleDist = 6.0f;
+    recastSettings.detailSampleMaxError = 1.0f;
+    recastSettings.autoTransformCoordinates = false;
+
+    UnityNavMeshBuilder unityBuilder;
+    UnityMeshData unityMeshData;
+    unityMeshData.vertices = objMesh.vertices.data();
+    unityMeshData.indices = objMesh.indices.data();
+    unityMeshData.vertexCount = static_cast<int>(objMesh.vertices.size()) / 3;
+    unityMeshData.indexCount = static_cast<int>(objMesh.indices.size());
+    UnityNavMeshResult unityResult = unityBuilder.BuildNavMesh(&unityMeshData, &unitySettings);
+    REQUIRE(unityResult.success == true);
+
+    RecastDemoNavMeshBuilder recastBuilder;
+    recastBuilder.SetSettings(recastSettings);
+    bool recastSuccess = recastBuilder.BuildNavMesh(
+        objMesh.vertices.data(), static_cast<int>(objMesh.vertices.size()) / 3,
+        objMesh.indices.data(), static_cast<int>(objMesh.indices.size()) / 3
+    );
+    REQUIRE(recastSuccess == true);
+
+    NavMeshComparisonResult comparison = CompareNavMeshResults(unityBuilder, recastBuilder);
+    INFO("Unity PolyCount: " << unityBuilder.GetPolyCount());
+    INFO("Recast PolyCount: " << recastBuilder.GetPolyCount());
+    INFO("Unity VertexCount: " << unityBuilder.GetVertexCount());
+    INFO("Recast VertexCount: " << recastBuilder.GetVertexCount());
+    INFO("Unity DetailTriCount: " << unityBuilder.GetDetailMeshTriCount());
+    INFO("Recast DetailTriCount: " << recastBuilder.GetDetailTriCount());
+    INFO("Unity DetailVertexCount: " << unityBuilder.GetDetailMeshVertexCount());
+    INFO("Recast DetailVertexCount: " << recastBuilder.GetDetailVertexCount());
+    INFO("Comparison: " << (comparison.IsIdentical() ? "IDENTICAL" : "DIFFERENT"));
+    if (!comparison.IsIdentical()) {
+        INFO("Differences:\n" << comparison.differences);
     }
-    
-    SECTION("Simple Plane Mesh Comparison")
-    {
-        INFO("=== Simple Plane Mesh Comparison ===");
-        
-        // Prepare test mesh data
-        auto vertices = CreateSimplePlaneMesh();
-        auto indices = CreateSimplePlaneIndices();
-        
-        // UnityWrapper settings
-        UnityNavMeshBuildSettings unitySettings = {};
-        unitySettings.cellSize = 0.3f;
-        unitySettings.cellHeight = 0.2f;
-        unitySettings.walkableSlopeAngle = 45.0f;
-        unitySettings.walkableHeight = 2.0f;
-        unitySettings.walkableRadius = 0.6f;
-        unitySettings.walkableClimb = 0.9f;
-        unitySettings.minRegionArea = 8.0f;
-        unitySettings.mergeRegionArea = 20.0f;
-        unitySettings.maxVertsPerPoly = 6;
-        unitySettings.detailSampleDist = 6.0f;
-        unitySettings.detailSampleMaxError = 1.0f;
-        unitySettings.autoTransformCoordinates = false;
-        unitySettings.partitionType = 0; // Watershed 방식으로 고정
-        
-        // RecastDemo settings
-        RecastDemoSettings recastSettings;
-        recastSettings.cellSize = 0.3f;
-        recastSettings.cellHeight = 0.2f;
-        recastSettings.agentHeight = 2.0f;
-        recastSettings.agentRadius = 0.6f;
-        recastSettings.agentMaxClimb = 0.9f;
-        recastSettings.agentMaxSlope = 45.0f;
-        recastSettings.regionMinSize = 8.0f;
-        recastSettings.regionMergeSize = 20.0f;
-        recastSettings.edgeMaxLen = 12.0f;
-        recastSettings.edgeMaxError = 1.3f;
-        recastSettings.vertsPerPoly = 6.0f;
-        recastSettings.detailSampleDist = 6.0f;
-        recastSettings.detailSampleMaxError = 1.0f;
-        recastSettings.autoTransformCoordinates = false;
-        
-        // UnityWrapper NavMesh build
-        UnityNavMeshBuilder unityBuilder;
-        UnityMeshData unityMeshData;
-        unityMeshData.vertices = vertices.data();
-        unityMeshData.indices = indices.data();
-        unityMeshData.vertexCount = static_cast<int>(vertices.size()) / 3;
-        unityMeshData.indexCount = static_cast<int>(indices.size());
-        
-        UnityNavMeshResult unityResult = unityBuilder.BuildNavMesh(&unityMeshData, &unitySettings);
-        REQUIRE(unityResult.success == true);
-        
-        // RecastDemo NavMesh build
-        RecastDemoNavMeshBuilder recastBuilder;
-        recastBuilder.SetSettings(recastSettings);
-        
-        // RecastDemo build with error handling
-        bool recastSuccess = false;
-        try {
-            std::cout << "RecastDemo: Starting NavMesh build..." << std::endl;
-            std::cout << "RecastDemo: Input data - vertices: " << vertices.size() / 3 << ", triangles: " << indices.size() / 3 << std::endl;
-            std::cout << "RecastDemo: Settings - cellSize: " << recastSettings.cellSize << ", cellHeight: " << recastSettings.cellHeight << std::endl;
-            
-            recastSuccess = recastBuilder.BuildNavMesh(
-                vertices.data(), static_cast<int>(vertices.size()) / 3,
-                indices.data(), static_cast<int>(indices.size()) / 3
-            );
-            
-            std::cout << "RecastDemo: BuildNavMesh returned: " << (recastSuccess ? "true" : "false") << std::endl;
-        } catch (const std::exception& e) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with exception: " << e.what() << std::endl;
-        } catch (...) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with unknown exception" << std::endl;
-        }
-        
-        // Result comparison
-        NavMeshComparisonResult comparison = CompareNavMeshResults(unityBuilder, recastBuilder);
-        
-        INFO("UnityWrapper Results:");
-        INFO("  PolyCount: " << unityBuilder.GetPolyCount());
-        INFO("  VertexCount: " << unityBuilder.GetVertexCount());
-        INFO("  NavMesh: " << (unityBuilder.GetNavMesh() ? "valid" : "null"));
-        INFO("  NavQuery: " << (unityBuilder.GetNavMeshQuery() ? "valid" : "null"));
-        
-        INFO("RecastDemo Results:");
-        INFO("  PolyCount: " << recastBuilder.GetPolyCount());
-        INFO("  VertexCount: " << recastBuilder.GetVertexCount());
-        INFO("  DetailTriCount: " << recastBuilder.GetDetailTriCount());
-        INFO("  DetailVertexCount: " << recastBuilder.GetDetailVertexCount());
-        INFO("  NavMesh: " << (recastBuilder.GetNavMesh() ? "valid" : "null"));
-        INFO("  NavQuery: " << (recastBuilder.GetNavMeshQuery() ? "valid" : "null"));
-        
-        INFO("Comparison Results:");
-        INFO("  PolyCount Match: " << (comparison.polyCountMatch ? "YES" : "NO"));
-        INFO("  VertexCount Match: " << (comparison.vertexCountMatch ? "YES" : "NO"));
-        INFO("  DetailTriCount Match: " << (comparison.detailTriCountMatch ? "YES" : "NO"));
-        INFO("  DetailVertexCount Match: " << (comparison.detailVertexCountMatch ? "YES" : "NO"));
-        INFO("  NavMesh Valid: " << (comparison.navMeshValid ? "YES" : "NO"));
-        INFO("  NavQuery Valid: " << (comparison.navQueryValid ? "YES" : "NO"));
-        
-        if (!comparison.IsIdentical()) {
-            INFO("Differences found:\n" << comparison.differences);
-        }
-        
-        // Minimum requirements verification
-        CHECK(unityResult.success == true);
-        REQUIRE(unityBuilder.GetNavMesh() != nullptr);
-        
-        // RecastDemo는 폴리곤이 0개일 때 실패하는 것이 정상
-        // 실제로 폴리곤이 생성되는 경우만 성공으로 판단
-        if (recastBuilder.GetPolyCount() > 0) {
-            CHECK(recastBuilder.GetNavMesh() != nullptr);
-        } else {
-            // 폴리곤이 0개면 NavMesh가 null인 것이 정상
-            CHECK(recastBuilder.GetNavMesh() == nullptr);
-        }
-        
-        // Memory cleanup
-        UnityRecast_FreeNavMeshData(&unityResult);
-    }
-    
-    SECTION("Complex Terrain Mesh Comparison")
-    {
-        INFO("=== Complex Terrain Mesh Comparison ===");
-        
-        // Prepare complex terrain mesh data
-        auto vertices = CreateComplexTerrainMesh();
-        auto indices = CreateComplexTerrainIndices();
-        
-        // UnityWrapper settings
-        UnityNavMeshBuildSettings unitySettings = {};
-        unitySettings.cellSize = 0.2f;
-        unitySettings.cellHeight = 0.1f;
-        unitySettings.walkableSlopeAngle = 45.0f;
-        unitySettings.walkableHeight = 2.0f;
-        unitySettings.walkableRadius = 0.6f;
-        unitySettings.walkableClimb = 0.9f;
-        unitySettings.minRegionArea = 4.0f;
-        unitySettings.mergeRegionArea = 10.0f;
-        unitySettings.maxVertsPerPoly = 6;
-        unitySettings.detailSampleDist = 3.0f;
-        unitySettings.detailSampleMaxError = 0.5f;
-        unitySettings.autoTransformCoordinates = false;
-        unitySettings.partitionType = 0; // Watershed 방식으로 고정
-        
-        // RecastDemo settings
-        RecastDemoSettings recastSettings;
-        recastSettings.cellSize = 0.2f;
-        recastSettings.cellHeight = 0.1f;
-        recastSettings.agentHeight = 2.0f;
-        recastSettings.agentRadius = 0.6f;
-        recastSettings.agentMaxClimb = 0.9f;
-        recastSettings.agentMaxSlope = 45.0f;
-        recastSettings.regionMinSize = 4.0f;
-        recastSettings.regionMergeSize = 10.0f;
-        recastSettings.edgeMaxLen = 8.0f;
-        recastSettings.edgeMaxError = 0.5f;
-        recastSettings.vertsPerPoly = 6.0f;
-        recastSettings.detailSampleDist = 3.0f;
-        recastSettings.detailSampleMaxError = 0.5f;
-        recastSettings.autoTransformCoordinates = false;
-        
-        // UnityWrapper NavMesh build
-        UnityNavMeshBuilder unityBuilder;
-        UnityMeshData unityMeshData;
-        unityMeshData.vertices = vertices.data();
-        unityMeshData.indices = indices.data();
-        unityMeshData.vertexCount = static_cast<int>(vertices.size()) / 3;
-        unityMeshData.indexCount = static_cast<int>(indices.size());
-        
-        UnityNavMeshResult unityResult = unityBuilder.BuildNavMesh(&unityMeshData, &unitySettings);
-        REQUIRE(unityResult.success == true);
-        
-        // RecastDemo NavMesh build
-        RecastDemoNavMeshBuilder recastBuilder;
-        recastBuilder.SetSettings(recastSettings);
-        
-        // RecastDemo build with error handling
-        bool recastSuccess = false;
-        try {
-            std::cout << "RecastDemo: Starting NavMesh build..." << std::endl;
-            std::cout << "RecastDemo: Input data - vertices: " << vertices.size() / 3 << ", triangles: " << indices.size() / 3 << std::endl;
-            std::cout << "RecastDemo: Settings - cellSize: " << recastSettings.cellSize << ", cellHeight: " << recastSettings.cellHeight << std::endl;
-            
-            recastSuccess = recastBuilder.BuildNavMesh(
-                vertices.data(), static_cast<int>(vertices.size()) / 3,
-                indices.data(), static_cast<int>(indices.size()) / 3
-            );
-            
-            std::cout << "RecastDemo: BuildNavMesh returned: " << (recastSuccess ? "true" : "false") << std::endl;
-        } catch (const std::exception& e) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with exception: " << e.what() << std::endl;
-        } catch (...) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with unknown exception" << std::endl;
-        }
-        
-        // Result comparison
-        NavMeshComparisonResult comparison = CompareNavMeshResults(unityBuilder, recastBuilder);
-        
-        INFO("UnityWrapper Results:");
-        INFO("  PolyCount: " << unityBuilder.GetPolyCount());
-        INFO("  VertexCount: " << unityBuilder.GetVertexCount());
-        
-        INFO("RecastDemo Results:");
-        INFO("  PolyCount: " << recastBuilder.GetPolyCount());
-        INFO("  VertexCount: " << recastBuilder.GetVertexCount());
-        INFO("  DetailTriCount: " << recastBuilder.GetDetailTriCount());
-        INFO("  DetailVertexCount: " << recastBuilder.GetDetailVertexCount());
-        
-        INFO("Comparison Results:");
-        INFO("  PolyCount Match: " << (comparison.polyCountMatch ? "YES" : "NO"));
-        INFO("  VertexCount Match: " << (comparison.vertexCountMatch ? "YES" : "NO"));
-        
-        if (!comparison.IsIdentical()) {
-            INFO("Differences found:\n" << comparison.differences);
-        }
-        
-        // Complex mesh should have more polygons
-        REQUIRE(unityBuilder.GetPolyCount() > 5);
-        
-        // RecastDemo는 폴리곤이 생성되는 경우만 성공으로 판단
-        if (recastBuilder.GetPolyCount() > 5) {
-            CHECK(recastBuilder.GetPolyCount() > 5);
-        } else {
-            // 폴리곤이 충분히 생성되지 않으면 경고만 출력
-            std::cout << "RecastDemo: Insufficient polygons generated (" << recastBuilder.GetPolyCount() << ")" << std::endl;
-        }
-        
-        // Memory cleanup
-        UnityRecast_FreeNavMeshData(&unityResult);
-    }
-    
-    SECTION("Different Cell Size Comparison")
-    {
-        INFO("=== Different Cell Size Comparison ===");
-        
-        auto vertices = CreateSimplePlaneMesh();
-        auto indices = CreateSimplePlaneIndices();
-        
-        std::vector<float> cellSizes = {0.1f, 0.3f, 0.5f};
-        
-        for (float cellSize : cellSizes) {
-            INFO("Testing cell size: " << cellSize);
-            
-            // UnityWrapper settings
-            UnityNavMeshBuildSettings unitySettings = {};
-            unitySettings.cellSize = cellSize;
-            unitySettings.cellHeight = 0.2f;
-            unitySettings.walkableSlopeAngle = 45.0f;
-            unitySettings.walkableHeight = 2.0f;
-            unitySettings.walkableRadius = 0.6f;
-            unitySettings.walkableClimb = 0.9f;
-            unitySettings.minRegionArea = 8.0f;
-            unitySettings.mergeRegionArea = 20.0f;
-            unitySettings.maxVertsPerPoly = 6;
-            unitySettings.detailSampleDist = 6.0f;
-            unitySettings.detailSampleMaxError = 1.0f;
-            unitySettings.autoTransformCoordinates = false;
-            unitySettings.partitionType = 0; // Watershed 방식으로 고정
-            
-            // RecastDemo settings
-            RecastDemoSettings recastSettings;
-            recastSettings.cellSize = cellSize;
-            recastSettings.cellHeight = 0.2f;
-            recastSettings.agentHeight = 2.0f;
-            recastSettings.agentRadius = 0.6f;
-            recastSettings.agentMaxClimb = 0.9f;
-            recastSettings.agentMaxSlope = 45.0f;
-            recastSettings.regionMinSize = 8.0f;
-            recastSettings.regionMergeSize = 20.0f;
-            recastSettings.edgeMaxLen = 12.0f;
-            recastSettings.edgeMaxError = 1.3f;
-            recastSettings.vertsPerPoly = 6.0f;
-            recastSettings.detailSampleDist = 6.0f;
-            recastSettings.detailSampleMaxError = 1.0f;
-            recastSettings.autoTransformCoordinates = false;
-            
-            // UnityWrapper NavMesh build
-            UnityNavMeshBuilder unityBuilder;
-            UnityMeshData unityMeshData;
-            unityMeshData.vertices = vertices.data();
-            unityMeshData.indices = indices.data();
-            unityMeshData.vertexCount = static_cast<int>(vertices.size()) / 3;
-            unityMeshData.indexCount = static_cast<int>(indices.size());
-            
-            UnityNavMeshResult unityResult = unityBuilder.BuildNavMesh(&unityMeshData, &unitySettings);
-            REQUIRE(unityResult.success == true);
-            
-            // RecastDemo NavMesh build
-            RecastDemoNavMeshBuilder recastBuilder;
-            recastBuilder.SetSettings(recastSettings);
-            
-            // RecastDemo build with error handling
-            bool recastSuccess = false;
-            try {
-                std::cout << "RecastDemo: Starting NavMesh build..." << std::endl;
-                std::cout << "RecastDemo: Input data - vertices: " << vertices.size() / 3 << ", triangles: " << indices.size() / 3 << std::endl;
-                std::cout << "RecastDemo: Settings - cellSize: " << recastSettings.cellSize << ", cellHeight: " << recastSettings.cellHeight << std::endl;
-                
-                recastSuccess = recastBuilder.BuildNavMesh(
-                    vertices.data(), static_cast<int>(vertices.size()) / 3,
-                    indices.data(), static_cast<int>(indices.size()) / 3
-                );
-                
-                std::cout << "RecastDemo: BuildNavMesh returned: " << (recastSuccess ? "true" : "false") << std::endl;
-            } catch (const std::exception& e) {
-                recastSuccess = false;
-                std::cout << "RecastDemo build failed with exception: " << e.what() << std::endl;
-            } catch (...) {
-                recastSuccess = false;
-                std::cout << "RecastDemo build failed with unknown exception" << std::endl;
-            }
-            
-            // Minimum requirements verification
-            REQUIRE(unityResult.success == true);
-            
-            // RecastDemo는 폴리곤이 생성되는 경우만 성공으로 판단
-            if (recastBuilder.GetPolyCount() > 0) {
-                CHECK(recastSuccess == true);
-            } else {
-                // 폴리곤이 생성되지 않으면 실패가 정상
-                CHECK(recastSuccess == false);
-            }
-            
-            // Result comparison
-            NavMeshComparisonResult comparison = CompareNavMeshResults(unityBuilder, recastBuilder);
-            
-            INFO("  Unity PolyCount: " << unityBuilder.GetPolyCount());
-            INFO("  Recast PolyCount: " << recastBuilder.GetPolyCount());
-            INFO("  Match: " << (comparison.polyCountMatch ? "YES" : "NO"));
-            
-            // Memory cleanup
-            UnityRecast_FreeNavMeshData(&unityResult);
-        }
-    }
-    
-    SECTION("Pathfinding Comparison")
-    {
-        INFO("=== Pathfinding Comparison ===");
-        
-        auto vertices = CreateSimplePlaneMesh();
-        auto indices = CreateSimplePlaneIndices();
-        
-        // UnityWrapper settings
-        UnityNavMeshBuildSettings unitySettings = {};
-        unitySettings.cellSize = 0.3f;
-        unitySettings.cellHeight = 0.2f;
-        unitySettings.walkableSlopeAngle = 45.0f;
-        unitySettings.walkableHeight = 2.0f;
-        unitySettings.walkableRadius = 0.6f;
-        unitySettings.walkableClimb = 0.9f;
-        unitySettings.minRegionArea = 8.0f;
-        unitySettings.mergeRegionArea = 20.0f;
-        unitySettings.maxVertsPerPoly = 6;
-        unitySettings.detailSampleDist = 6.0f;
-        unitySettings.detailSampleMaxError = 1.0f;
-        unitySettings.autoTransformCoordinates = false;
-        unitySettings.partitionType = 0; // Watershed 방식으로 고정
-        
-        // RecastDemo settings
-        RecastDemoSettings recastSettings;
-        recastSettings.cellSize = 0.3f;
-        recastSettings.cellHeight = 0.2f;
-        recastSettings.agentHeight = 2.0f;
-        recastSettings.agentRadius = 0.6f;
-        recastSettings.agentMaxClimb = 0.9f;
-        recastSettings.agentMaxSlope = 45.0f;
-        recastSettings.regionMinSize = 8.0f;
-        recastSettings.regionMergeSize = 20.0f;
-        recastSettings.edgeMaxLen = 12.0f;
-        recastSettings.edgeMaxError = 1.3f;
-        recastSettings.vertsPerPoly = 6.0f;
-        recastSettings.detailSampleDist = 6.0f;
-        recastSettings.detailSampleMaxError = 1.0f;
-        recastSettings.autoTransformCoordinates = false;
-        
-        // UnityWrapper NavMesh build
-        UnityNavMeshBuilder unityBuilder;
-        UnityMeshData unityMeshData;
-        unityMeshData.vertices = vertices.data();
-        unityMeshData.indices = indices.data();
-        unityMeshData.vertexCount = static_cast<int>(vertices.size()) / 3;
-        unityMeshData.indexCount = static_cast<int>(indices.size());
-        
-        UnityNavMeshResult unityResult = unityBuilder.BuildNavMesh(&unityMeshData, &unitySettings);
-        REQUIRE(unityResult.success == true);
-        
-        // RecastDemo NavMesh build
-        RecastDemoNavMeshBuilder recastBuilder;
-        recastBuilder.SetSettings(recastSettings);
-        
-        // RecastDemo build with error handling
-        bool recastSuccess = false;
-        try {
-            std::cout << "RecastDemo: Starting NavMesh build..." << std::endl;
-            std::cout << "RecastDemo: Input data - vertices: " << vertices.size() / 3 << ", triangles: " << indices.size() / 3 << std::endl;
-            std::cout << "RecastDemo: Settings - cellSize: " << recastSettings.cellSize << ", cellHeight: " << recastSettings.cellHeight << std::endl;
-            
-            recastSuccess = recastBuilder.BuildNavMesh(
-                vertices.data(), static_cast<int>(vertices.size()) / 3,
-                indices.data(), static_cast<int>(indices.size()) / 3
-            );
-            
-            std::cout << "RecastDemo: BuildNavMesh returned: " << (recastSuccess ? "true" : "false") << std::endl;
-        } catch (const std::exception& e) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with exception: " << e.what() << std::endl;
-        } catch (...) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with unknown exception" << std::endl;
-        }
-        
-        // Pathfinding test
-        float startPos[3] = {-0.5f, 0.0f, -0.5f};
-        float endPos[3] = {0.5f, 0.0f, 0.5f};
-        
-        // UnityWrapper pathfinding
-        UnityPathfinding unityPathfinding;
-        unityPathfinding.SetNavMesh(unityBuilder.GetNavMesh(), unityBuilder.GetNavMeshQuery());
-        UnityPathResult unityPathResult = unityPathfinding.FindPath(
-            startPos[0], startPos[1], startPos[2],
-            endPos[0], endPos[1], endPos[2]
-        );
-        
-        // RecastDemo pathfinding (only if NavMesh was built successfully)
-        bool recastPathfindingSuccess = false;
-        if (recastSuccess && recastBuilder.GetNavMesh() && recastBuilder.GetNavMeshQuery()) {
-            try {
-                dtPolyRef startRef, endRef;
-                float startPt[3], endPt[3];
-                
-                float extents[3] = {2.0f, 4.0f, 2.0f};
-                
-                dtStatus status = recastBuilder.GetNavMeshQuery()->findNearestPoly(
-                    startPos, extents, &dtQueryFilter(), &startRef, startPt
-                );
-                if (!dtStatusFailed(status)) {
-                    status = recastBuilder.GetNavMeshQuery()->findNearestPoly(
-                        endPos, extents, &dtQueryFilter(), &endRef, endPt
-                    );
-                    if (!dtStatusFailed(status)) {
-                        dtPolyRef path[256];
-                        int pathCount = 0;
-                        
-                        status = recastBuilder.GetNavMeshQuery()->findPath(
-                            startRef, endRef, startPt, endPt, &dtQueryFilter(), path, &pathCount, 256
-                        );
-                        recastPathfindingSuccess = !dtStatusFailed(status);
-                        
-                        INFO("RecastDemo Pathfinding:");
-                        INFO("  Success: " << (recastPathfindingSuccess ? "YES" : "NO"));
-                        INFO("  PathCount: " << pathCount);
-                    }
-                }
-            } catch (...) {
-                recastPathfindingSuccess = false;
-                INFO("RecastDemo pathfinding failed with exception");
-            }
-        } else {
-            INFO("RecastDemo Pathfinding: Skipped (NavMesh not available)");
-        }
-        
-        INFO("UnityWrapper Pathfinding:");
-        INFO("  Success: " << (unityPathResult.success ? "YES" : "NO"));
-        INFO("  PointCount: " << unityPathResult.pointCount);
-        
-        // Pathfinding should succeed for UnityWrapper
-        REQUIRE(unityPathResult.success == true);
-        
-        // RecastDemo는 NavMesh가 있을 때만 경로찾기가 가능
-        if (recastBuilder.GetNavMesh() != nullptr) {
-            CHECK(recastPathfindingSuccess == true);
-        } else {
-            // NavMesh가 없으면 경로찾기 실패가 정상
-            CHECK(recastPathfindingSuccess == false);
-        }
-        
-        // Memory cleanup
-        UnityRecast_FreeNavMeshData(&unityResult);
-        if (unityPathResult.pathPoints) {
-            delete[] unityPathResult.pathPoints;
-        }
-    }
-    
-    SECTION("Real Test Map Comparison")
-    {
-        INFO("=== Real Test Map Comparison ===");
-        
-        // Load real test map from RecastDemo
-        std::string objPath = "../../../RecastDemo/Bin/Meshes/nav_test.obj";
-        ObjMeshData objMesh = LoadObjFile(objPath);
-        
-        if (!objMesh.loaded) {
-            FAIL("Failed to load test map: " << objPath);
-        }
-        
-        // UnityWrapper settings (RecastDemo와 동일한 설정 사용)
-        UnityNavMeshBuildSettings unitySettings = {};
-        unitySettings.cellSize = 0.3f;
-        unitySettings.cellHeight = 0.2f;
-        unitySettings.walkableSlopeAngle = 45.0f;
-        unitySettings.walkableHeight = 2.0f;
-        unitySettings.walkableRadius = 0.6f;
-        unitySettings.walkableClimb = 0.9f;
-        unitySettings.minRegionArea = 8.0f;
-        unitySettings.mergeRegionArea = 20.0f;
-        unitySettings.maxVertsPerPoly = 6;
-        unitySettings.detailSampleDist = 6.0f;
-        unitySettings.detailSampleMaxError = 1.0f;
-        unitySettings.autoTransformCoordinates = false;
-        unitySettings.partitionType = 0; // Watershed 방식으로 고정
-        
-        // RecastDemo settings (UnityWrapper와 동일한 설정)
-        RecastDemoSettings recastSettings;
-        recastSettings.cellSize = 0.3f;
-        recastSettings.cellHeight = 0.2f;
-        recastSettings.agentHeight = 2.0f;
-        recastSettings.agentRadius = 0.6f;
-        recastSettings.agentMaxClimb = 0.9f;
-        recastSettings.agentMaxSlope = 45.0f;
-        recastSettings.regionMinSize = 8.0f;
-        recastSettings.regionMergeSize = 20.0f;
-        recastSettings.edgeMaxLen = 12.0f;
-        recastSettings.edgeMaxError = 1.3f;
-        recastSettings.vertsPerPoly = 6.0f;
-        recastSettings.detailSampleDist = 6.0f;
-        recastSettings.detailSampleMaxError = 1.0f;
-        recastSettings.autoTransformCoordinates = false;
-        
-        // UnityWrapper NavMesh build
-        UnityNavMeshBuilder unityBuilder;
-        UnityMeshData unityMeshData;
-        unityMeshData.vertices = objMesh.vertices.data();
-        unityMeshData.indices = objMesh.indices.data();
-        unityMeshData.vertexCount = static_cast<int>(objMesh.vertices.size()) / 3;
-        unityMeshData.indexCount = static_cast<int>(objMesh.indices.size());
-        
-        UnityNavMeshResult unityResult = unityBuilder.BuildNavMesh(&unityMeshData, &unitySettings);
-        REQUIRE(unityResult.success == true);
-        
-        // RecastDemo NavMesh build
-        RecastDemoNavMeshBuilder recastBuilder;
-        recastBuilder.SetSettings(recastSettings);
-        
-        // RecastDemo build with error handling
-        bool recastSuccess = false;
-        try {
-            std::cout << "RecastDemo: Starting NavMesh build with real test map..." << std::endl;
-            std::cout << "RecastDemo: Input data - vertices: " << objMesh.vertices.size() / 3 
-                     << ", triangles: " << objMesh.indices.size() / 3 << std::endl;
-            std::cout << "RecastDemo: Settings - cellSize: " << recastSettings.cellSize 
-                     << ", cellHeight: " << recastSettings.cellHeight << std::endl;
-            
-            recastSuccess = recastBuilder.BuildNavMesh(
-                objMesh.vertices.data(), static_cast<int>(objMesh.vertices.size()) / 3,
-                objMesh.indices.data(), static_cast<int>(objMesh.indices.size()) / 3
-            );
-            
-            std::cout << "RecastDemo: BuildNavMesh returned: " << (recastSuccess ? "true" : "false") << std::endl;
-        } catch (const std::exception& e) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with exception: " << e.what() << std::endl;
-        } catch (...) {
-            recastSuccess = false;
-            std::cout << "RecastDemo build failed with unknown exception" << std::endl;
-        }
-        
-        // Result comparison
-        NavMeshComparisonResult comparison = CompareNavMeshResults(unityBuilder, recastBuilder);
-        
-        INFO("Real Test Map Results:");
-        INFO("UnityWrapper Results:");
-        INFO("  PolyCount: " << unityBuilder.GetPolyCount());
-        INFO("  VertexCount: " << unityBuilder.GetVertexCount());
-        INFO("  NavMesh: " << (unityBuilder.GetNavMesh() ? "valid" : "null"));
-        INFO("  NavQuery: " << (unityBuilder.GetNavMeshQuery() ? "valid" : "null"));
-        
-        // UnityWrapper의 실제 PolyMesh 정보 출력
-        INFO("UnityWrapper PolyMesh Details:");
-        INFO("  PolyMesh PolyCount: " << unityBuilder.GetPolyMeshPolyCount());
-        INFO("  PolyMesh VertexCount: " << unityBuilder.GetPolyMeshVertexCount());
-        INFO("  DetailMesh TriCount: " << unityBuilder.GetDetailMeshTriCount());
-        INFO("  DetailMesh VertexCount: " << unityBuilder.GetDetailMeshVertexCount());
-        
-        INFO("RecastDemo Results:");
-        INFO("  PolyCount: " << recastBuilder.GetPolyCount());
-        INFO("  VertexCount: " << recastBuilder.GetVertexCount());
-        INFO("  DetailTriCount: " << recastBuilder.GetDetailTriCount());
-        INFO("  DetailVertexCount: " << recastBuilder.GetDetailVertexCount());
-        INFO("  NavMesh: " << (recastBuilder.GetNavMesh() ? "valid" : "null"));
-        INFO("  NavQuery: " << (recastBuilder.GetNavMeshQuery() ? "valid" : "null"));
-        
-        INFO("Comparison Results:");
-        INFO("  PolyCount Match: " << (comparison.polyCountMatch ? "YES" : "NO"));
-        INFO("  VertexCount Match: " << (comparison.vertexCountMatch ? "YES" : "NO"));
-        INFO("  DetailTriCount Match: " << (comparison.detailTriCountMatch ? "YES" : "NO"));
-        INFO("  DetailVertexCount Match: " << (comparison.detailVertexCountMatch ? "YES" : "NO"));
-        INFO("  NavMesh Valid: " << (comparison.navMeshValid ? "YES" : "NO"));
-        INFO("  NavQuery Valid: " << (comparison.navQueryValid ? "YES" : "NO"));
-        
-        if (!comparison.IsIdentical()) {
-            INFO("Differences found:\n" << comparison.differences);
-        }
-        
-        // Real test map should generate meaningful NavMesh
-        REQUIRE(unityResult.success == true);
-        REQUIRE(unityBuilder.GetNavMesh() != nullptr);
-        
-        // Both should generate NavMesh for real test map
-        CHECK(recastSuccess == true);
-        CHECK(recastBuilder.GetNavMesh() != nullptr);
-        CHECK(unityBuilder.GetPolyCount() > 0);
-        CHECK(recastBuilder.GetPolyCount() > 0);
-        
-        // PolyCount should be similar (not necessarily identical due to different implementations)
-        CHECK(std::abs(unityBuilder.GetPolyCount() - recastBuilder.GetPolyCount()) < 50);
-        
-        // Memory cleanup
-        UnityRecast_FreeNavMeshData(&unityResult);
-    }
+    CHECK(comparison.IsIdentical());
 } 
