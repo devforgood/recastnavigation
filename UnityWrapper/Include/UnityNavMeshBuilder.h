@@ -1,14 +1,21 @@
 #pragma once
 
-#include "UnityRecastWrapper.h"
+#include "UnityCommonTypes.h"
 #include "UnityLog.h"
-#include "Recast.h"
-#include "DetourNavMesh.h"
-#include "DetourNavMeshBuilder.h"
 #include <vector>
 #include <memory>
 #include <iostream>
 #include <cstdint>
+
+// Forward declarations
+class rcContext;
+class rcHeightfield;
+class rcCompactHeightfield;
+class rcContourSet;
+class rcPolyMesh;
+class rcPolyMeshDetail;
+class dtNavMesh;
+class dtNavMeshQuery;
 
 // RecastDemo 상수들
 enum SamplePartitionType
@@ -62,6 +69,12 @@ public:
     
     int GetPolyCount() const;
     int GetVertexCount() const;
+    
+    // Get individual mesh statistics
+    int GetPolyMeshPolyCount() const;
+    int GetPolyMeshVertexCount() const;
+    int GetDetailMeshTriCount() const;
+    int GetDetailMeshVertexCount() const;
     
     // 디버그 데이터 가져오기 (시각화용)
     bool GetDebugVertices(std::vector<float>& vertices) const;

@@ -1,8 +1,11 @@
 #pragma once
 
-#include "UnityRecastWrapper.h"
+#include "UnityCommonTypes.h"
 #include "DetourNavMeshQuery.h"
+#include "DetourNavMesh.h"
 #include <vector>
+
+// UnityPathResult는 UnityRecastWrapper.h에서 정의됨
 
 class UnityPathfinding {
 public:

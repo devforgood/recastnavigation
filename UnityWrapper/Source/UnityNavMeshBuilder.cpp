@@ -176,36 +176,12 @@ UnityNavMeshResult UnityNavMeshBuilder::BuildNavMesh(
             }
         }
         
-        // 타일 데이터가 없는 경우 (테스트 NavMesh) 더미 데이터 생성
+        // 더미 NavMesh 생성 코드 완전 제거, 실제 데이터가 없으면 실패 처리
         if (!navData || navDataSize == 0) {
-            UNITY_LOG_INFO("No tile data found, creating dummy NavMesh data for testing...");
-            
-            // 더미 NavMesh 데이터 생성
-            const int DUMMY_MAGIC = 'M' | ('N' << 8) | ('A' << 16) | ('V' << 24);
-            const int DUMMY_VERSION = 1;
-            
-            struct DummyNavMeshHeader {
-                int magic;
-                int version;
-                int dataSize;
-                int polyCount;
-                int vertCount;
-            };
-            
-            navDataSize = sizeof(DummyNavMeshHeader) + 1024; // 헤더 + 더미 데이터
-            navData = new unsigned char[navDataSize];
-            memset(navData, 0, navDataSize);
-            
-            DummyNavMeshHeader* header = reinterpret_cast<DummyNavMeshHeader*>(navData);
-            header->magic = DUMMY_MAGIC;
-            header->version = DUMMY_VERSION;
-            header->dataSize = navDataSize;
-            header->polyCount = GetPolyCount();
-            header->vertCount = GetVertexCount();
-            
-            // 나머지는 0으로 채움 (더미 데이터)
-            
-            UNITY_LOG_INFO("Dummy NavMesh data created, size=%d", navDataSize);
+            UNITY_LOG_ERROR("No valid NavMesh data generated (no tile data)");
+            result.success = false;
+            result.errorMessage = const_cast<char*>("No valid NavMesh data generated");
+            return result;
         }
         
         UNITY_LOG_INFO("NavMesh data serialization completed, size=%d", navDataSize);
@@ -390,31 +366,23 @@ int UnityNavMeshBuilder::GetVertexCount() const {
 bool UnityNavMeshBuilder::BuildHeightfield(const UnityMeshData* meshData, const UnityNavMeshBuildSettings* settings) {
     UNITY_LOG_INFO("  BuildHeightfield: start");
     
-    // 바운딩 박스 계산
-    float bmin[3] = { FLT_MAX, FLT_MAX, FLT_MAX };
-    float bmax[3] = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
-    
-    for (int i = 0; i < meshData->vertexCount; ++i) {
-        const float* v = &meshData->vertices[i * 3];
-        bmin[0] = std::min(bmin[0], v[0]);
-        bmin[1] = std::min(bmin[1], v[1]);
-        bmin[2] = std::min(bmin[2], v[2]);
-        bmax[0] = std::max(bmax[0], v[0]);
-        bmax[1] = std::max(bmax[1], v[1]);
-        bmax[2] = std::max(bmax[2], v[2]);
-    }
+    // RecastDemo와 동일한 바운딩 박스 계산 사용
+    float bmin[3], bmax[3];
+    rcCalcBounds(meshData->vertices, meshData->vertexCount, bmin, bmax);
     
     UNITY_LOG_INFO("  BoundingBox: bmin=[%.2f,%.2f,%.2f]", bmin[0], bmin[1], bmin[2]);
     UNITY_LOG_INFO("  BoundingBox: bmax=[%.2f,%.2f,%.2f]", bmax[0], bmax[1], bmax[2]);
     
-    // Heightfield 생성
-    m_solid = std::make_unique<rcHeightfield>();
-    int width = static_cast<int>((bmax[0] - bmin[0]) / settings->cellSize + 1);
-    int height = static_cast<int>((bmax[2] - bmin[2]) / settings->cellSize + 1);
+    // RecastDemo와 동일한 그리드 크기 계산 사용
+    int width, height;
+    rcCalcGridSize(bmin, bmax, settings->cellSize, &width, &height);
     
     UNITY_LOG_INFO("  Heightfield size: width=%d, height=%d", width, height);
-    UNITY_LOG_INFO("  rcCreateHeightfield calling...");
     
+    // Heightfield 객체 생성 (누락된 부분 추가)
+    m_solid = std::make_unique<rcHeightfield>();
+    
+    UNITY_LOG_INFO("  rcCreateHeightfield calling...");
     if (!rcCreateHeightfield(m_ctx.get(), *m_solid, width, height, bmin, bmax, settings->cellSize, settings->cellHeight)) {
         UNITY_LOG_ERROR("  ERROR: rcCreateHeightfield failed");
         return false;
@@ -501,10 +469,10 @@ bool UnityNavMeshBuilder::BuildCompactHeightfield(const UnityNavMeshBuildSetting
         UNITY_LOG_WARNING("  WARNING: No walkable spans found! ContourSet generation will fail");
     }
     
-    // 간단한 테스트 PolyMesh 생성 (문제 진단용)
-    UNITY_LOG_INFO("  CreateSimplePolyMesh calling...");
-    CreateSimplePolyMesh(settings);
-    UNITY_LOG_INFO("  CreateSimplePolyMesh success");
+    // CreateSimplePolyMesh 호출 제거 (RecastDemo와 동일한 파이프라인 사용)
+    // UNITY_LOG_INFO("  CreateSimplePolyMesh calling...");
+    // CreateSimplePolyMesh(settings);
+    // UNITY_LOG_INFO("  CreateSimplePolyMesh success");
     
     return true;
 }
@@ -547,37 +515,36 @@ bool UnityNavMeshBuilder::BuildRegions(const UnityNavMeshBuildSettings* settings
     if (erodedSpans > 0) {
         float erosionPercentage = (erodedSpans * 100.0f) / walkableSpansBefore;
         UNITY_LOG_INFO("  Erosion removed %d spans (%.1f%% of walkable area)", erodedSpans, erosionPercentage);
-        
         if (erosionPercentage > 90.0f) {
-            UNITY_LOG_WARNING("  WARNING: Erosion removed >90%% of walkable area!");
-            UNITY_LOG_WARNING("  Consider reducing walkableRadius or increasing cellSize");
+            UNITY_LOG_WARNING("  WARNING: More than 90%% of walkable area was eroded!");
         }
     }
-    
-    if (walkableSpansAfter == 0) {
-        UNITY_LOG_WARNING("  WARNING: No walkable area remaining after erosion!");
-        UNITY_LOG_WARNING("  All walkable spans were eroded away");
-        UNITY_LOG_WARNING("  Recommendation: Reduce walkableRadius or increase mesh size");
-    }
-    
-    UNITY_LOG_INFO("  rcBuildDistanceField calling...");
-    if (!rcBuildDistanceField(m_ctx.get(), *m_chf)) {
-        UNITY_LOG_ERROR("  ERROR: rcBuildDistanceField failed");
+
+    // partitionType에 따라 region 빌드 방식 선택
+    bool regionResult = false;
+    if (settings->partitionType == 0) {
+        UNITY_LOG_INFO("  rcBuildRegions (Watershed) 호출");
+        regionResult = rcBuildRegions(m_ctx.get(), *m_chf, 0,
+            static_cast<int>(settings->minRegionArea),
+            static_cast<int>(settings->mergeRegionArea));
+    } else if (settings->partitionType == 1) {
+        UNITY_LOG_INFO("  rcBuildRegionsMonotone (Monotone) 호출");
+        regionResult = rcBuildRegionsMonotone(m_ctx.get(), *m_chf, 0,
+            static_cast<int>(settings->minRegionArea),
+            static_cast<int>(settings->mergeRegionArea));
+    } else if (settings->partitionType == 2) {
+        UNITY_LOG_INFO("  rcBuildLayerRegions (Layers) 호출");
+        regionResult = rcBuildLayerRegions(m_ctx.get(), *m_chf, 0,
+            static_cast<int>(settings->minRegionArea));
+    } else {
+        UNITY_LOG_ERROR("  ERROR: Unknown partitionType %d", settings->partitionType);
         return false;
     }
-    UNITY_LOG_INFO("  rcBuildDistanceField success");
-    
-    UNITY_LOG_INFO("  rcBuildRegions calling...");
-    UNITY_LOG_INFO("  minRegionArea=%.1f, mergeRegionArea=%.1f", 
-                   settings->minRegionArea, settings->mergeRegionArea);
-    
-    if (!rcBuildRegions(m_ctx.get(), *m_chf, 0, 
-                       static_cast<int>(settings->minRegionArea), 
-                       static_cast<int>(settings->mergeRegionArea))) {
-        UNITY_LOG_ERROR("  ERROR: rcBuildRegions failed");
+    if (!regionResult) {
+        UNITY_LOG_ERROR("  ERROR: BuildRegions failed");
         return false;
     }
-    UNITY_LOG_INFO("  rcBuildRegions success");
+    UNITY_LOG_INFO("  BuildRegions success");
     
     // Region 생성 결과 확인
     int regionCount = 0;
@@ -602,8 +569,7 @@ bool UnityNavMeshBuilder::BuildContourSet(const UnityNavMeshBuildSettings* setti
     m_cset = std::make_unique<rcContourSet>();
     
     if (!rcBuildContours(m_ctx.get(), *m_chf, settings->maxSimplificationError, 
-                        static_cast<int>(settings->maxEdgeLen), *m_cset, 
-                        RC_CONTOUR_TESS_WALL_EDGES)) {
+                        static_cast<int>(settings->maxEdgeLen), *m_cset)) {
         UNITY_LOG_ERROR("  ERROR: rcBuildContours failed");
         return false;
     }
@@ -674,65 +640,10 @@ bool UnityNavMeshBuilder::BuildDetourNavMesh(const UnityNavMeshBuildSettings* se
         UNITY_LOG_INFO("  m_dmesh->tris: %s", (m_dmesh->tris ? "valid" : "NULL"));
     }
     
-    // m_pmesh와 m_dmesh가 없거나 데이터가 비어있으면 간단한 테스트용 NavMesh 생성
+    // m_pmesh와 m_dmesh가 없거나 데이터가 비어있으면 NavMesh 생성 실패로 처리
     if (!m_pmesh || !m_dmesh || m_pmesh->nverts == 0 || m_pmesh->npolys == 0) {
-        UNITY_LOG_WARNING("  WARNING: No real NavMesh data, creating test NavMesh!");
-        UNITY_LOG_INFO("  Reason: m_pmesh=%s, m_dmesh=%s", 
-                       (m_pmesh ? "valid" : "NULL"), 
-                       (m_dmesh ? "valid" : "NULL"));
-        if (m_pmesh) {
-            UNITY_LOG_INFO("  m_pmesh status: nverts=%d, npolys=%d", m_pmesh->nverts, m_pmesh->npolys);
-        }
-        
-        // 직접 NavMesh 데이터 생성 (테스트용)
-        const int NAVMESHSET_MAGIC = 'M'|('S'<<8)|('E'<<16)|('T'<<24);
-        const int NAVMESHSET_VERSION = 1;
-        
-        // 간단한 NavMesh 헤더 구조
-        struct NavMeshSetHeader {
-            int magic;
-            int version;
-            int numTiles;
-            dtNavMeshParams params;
-        };
-        
-        // 간단한 타일 헤더 구조  
-        struct NavMeshTileHeader {
-            dtTileRef tileRef;
-            int dataSize;
-        };
-        
-        // NavMesh 매개변수 설정
-        dtNavMeshParams navParams;
-        navParams.orig[0] = -5.0f;
-        navParams.orig[1] = 0.0f; 
-        navParams.orig[2] = -5.0f;
-        navParams.tileWidth = 10.0f;
-        navParams.tileHeight = 10.0f;
-        navParams.maxTiles = 1;
-        navParams.maxPolys = 256;
-        
-        // NavMesh 생성
-        m_navMesh = std::make_unique<dtNavMesh>();
-        if (dtStatusFailed(m_navMesh->init(&navParams))) {
-            UNITY_LOG_ERROR("  BuildDetourNavMesh: NavMesh init failed");
-            return false;
-        }
-        
-        UNITY_LOG_INFO("  BuildDetourNavMesh: Test NavMesh created successfully");
-        
-        // NavMeshQuery 생성
-        m_navMeshQuery = std::make_unique<dtNavMeshQuery>();
-        dtStatus status = m_navMeshQuery->init(m_navMesh.get(), 2048);
-        if (dtStatusFailed(status)) {
-            UNITY_LOG_ERROR("  BuildDetourNavMesh: NavMeshQuery init failed, status=0x%x", status);
-            m_navMeshQuery.reset();
-            return false;
-        }
-        
-        UNITY_LOG_INFO("  BuildDetourNavMesh: NavMeshQuery initialized successfully");
-        UNITY_LOG_INFO("  BuildDetourNavMesh: completed (test mode)");
-        return true;
+        UNITY_LOG_ERROR("  BuildDetourNavMesh: No valid mesh data (nverts=0 또는 npolys=0), NavMesh 생성 실패");
+        return false;
     }
     
     // 실제 m_pmesh와 m_dmesh가 있는 경우 상태 확인
@@ -1698,8 +1609,9 @@ void UnityNavMeshBuilder::applyRecastDemoSettings(UnityNavMeshBuildSettings* set
     settings->maxEdgeLen = m_edgeMaxLen;
     settings->maxSimplificationError = m_edgeMaxError;
     settings->maxVertsPerPoly = (int)m_vertsPerPoly;
-    settings->detailSampleDist = m_detailSampleDist;
-    settings->detailSampleMaxError = m_detailSampleMaxError;
+    // RecastDemo와 동일한 detailSampleDist 계산
+    settings->detailSampleDist = m_detailSampleDist < 0.9f ? 0 : m_cellSize * m_detailSampleDist;
+    settings->detailSampleMaxError = m_cellHeight * m_detailSampleMaxError;
     
     UNITY_LOG_INFO("Applied RecastDemo settings:");
     UNITY_LOG_INFO("  - cellSize: %.3f", settings->cellSize);
@@ -1717,4 +1629,32 @@ void UnityNavMeshBuilder::applyRecastDemoSettings(UnityNavMeshBuildSettings* set
     UNITY_LOG_INFO("  - detailSampleMaxError: %.1f", settings->detailSampleMaxError);
     
     UNITY_LOG_INFO("=== RecastDemo Settings Applied Successfully ===");
+}
+
+int UnityNavMeshBuilder::GetPolyMeshPolyCount() const {
+    if (m_pmesh && m_pmesh->npolys > 0) {
+        return m_pmesh->npolys;
+    }
+    return 0;
+}
+
+int UnityNavMeshBuilder::GetPolyMeshVertexCount() const {
+    if (m_pmesh && m_pmesh->nverts > 0) {
+        return m_pmesh->nverts;
+    }
+    return 0;
+}
+
+int UnityNavMeshBuilder::GetDetailMeshTriCount() const {
+    if (m_dmesh && m_dmesh->ntris > 0) {
+        return m_dmesh->ntris;
+    }
+    return 0;
+}
+
+int UnityNavMeshBuilder::GetDetailMeshVertexCount() const {
+    if (m_dmesh && m_dmesh->nverts > 0) {
+        return m_dmesh->nverts;
+    }
+    return 0;
 } 

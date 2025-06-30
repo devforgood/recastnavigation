@@ -1,6 +1,7 @@
 #include "catch_all.hpp"
 #include "UnityPathfinding.h"
 #include "UnityNavMeshBuilder.h"
+#include "UnityRecastWrapper.h"
 #include <memory>
 #include <vector>
 #include <cmath>

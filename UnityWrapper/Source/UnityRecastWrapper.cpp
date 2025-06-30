@@ -2,6 +2,10 @@
 #include "UnityNavMeshBuilder.h"
 #include "UnityPathfinding.h"
 #include "UnityLog.h"
+#include "Recast.h"
+#include "DetourNavMesh.h"
+#include "DetourNavMeshBuilder.h"
+#include "DetourNavMeshQuery.h"
 #include <memory>
 #include <cstring>
 #include <cmath>

@@ -1,5 +1,6 @@
 #include "catch_all.hpp"
 #include "UnityNavMeshBuilder.h"
+#include "UnityRecastWrapper.h"
 #include <memory>
 #include <vector>
 
