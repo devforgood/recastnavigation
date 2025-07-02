@@ -2,6 +2,7 @@
 #include "RecastNavigationUnity.h"
 #include "DetourNavMesh.h"
 #include "DetourCrowd.h"
+#include "DetourNavMeshQuery.h"
 #include <memory>
 
 UnityCrowdManager::UnityCrowdManager() {
@@ -39,7 +40,7 @@ AgentHandle UnityCrowdManager::AddAgent(
         return -1;
     }
 
-    dtCrowd* dtCrowd = static_cast<dtCrowd*>(crowd);
+    dtCrowd* crowd2 = static_cast<dtCrowd*>(crowd);
     
     // Convert Unity coordinates to Detour coordinates
     float pos[3] = { position.x, position.y, position.z };
@@ -57,15 +58,11 @@ AgentHandle UnityCrowdManager::AddAgent(
     agentParams.updateFlags = params->updateFlags;
     agentParams.obstacleAvoidanceType = params->obstacleAvoidanceType;
     
-    // Set query filter
-    for (int i = 0; i < 64; i++) {
-        agentParams.queryFilter.setAreaCost(i, params->queryFilter.walkableAreaCost[i]);
-    }
-    agentParams.queryFilter.setIncludeFlags(params->queryFilter.includeFlags);
-    agentParams.queryFilter.setExcludeFlags(params->queryFilter.excludeFlags);
+    // Set query filter type
+    agentParams.queryFilterType = params->queryFilterType;
     
     // Add agent
-    int agentIndex = dtCrowd->addAgent(pos, &agentParams);
+    int agentIndex = crowd2->addAgent(pos, &agentParams);
     
     return agentIndex;
 }
@@ -75,8 +72,8 @@ void UnityCrowdManager::RemoveAgent(CrowdHandle crowd, AgentHandle agent) {
         return;
     }
 
-    dtCrowd* dtCrowd = static_cast<dtCrowd*>(crowd);
-    dtCrowd->removeAgent(agent);
+    dtCrowd* crowd2 = static_cast<dtCrowd*>(crowd);
+	crowd2->removeAgent(agent);
 }
 
 int UnityCrowdManager::SetAgentTarget(
@@ -88,13 +85,13 @@ int UnityCrowdManager::SetAgentTarget(
         return 0;
     }
 
-    dtCrowd* dtCrowd = static_cast<dtCrowd*>(crowd);
+    dtCrowd* crowd2 = static_cast<dtCrowd*>(crowd);
     
     // Convert Unity coordinates to Detour coordinates
     float targetPos[3] = { target.x, target.y, target.z };
     
     // Set agent target
-    dtStatus status = dtCrowd->requestMoveTarget(agent, targetPos);
+    dtStatus status = crowd2->requestMoveTarget(agent, 0, targetPos);
     
     return dtStatusSucceed(status) ? 1 : 0;
 }
@@ -106,9 +103,9 @@ UnityVector3 UnityCrowdManager::GetAgentPosition(CrowdHandle crowd, AgentHandle 
         return result;
     }
 
-    dtCrowd* dtCrowd = static_cast<dtCrowd*>(crowd);
+    dtCrowd* crowd2 = static_cast<dtCrowd*>(crowd);
     
-    const dtCrowdAgent* agentData = dtCrowd->getAgent(agent);
+    const dtCrowdAgent* agentData = crowd2->getAgent(agent);
     if (agentData) {
         result.x = agentData->npos[0];
         result.y = agentData->npos[1];
@@ -125,9 +122,9 @@ UnityVector3 UnityCrowdManager::GetAgentVelocity(CrowdHandle crowd, AgentHandle 
         return result;
     }
 
-    dtCrowd* dtCrowd = static_cast<dtCrowd*>(crowd);
+    dtCrowd* crowd2 = static_cast<dtCrowd*>(crowd);
     
-    const dtCrowdAgent* agentData = dtCrowd->getAgent(agent);
+    const dtCrowdAgent* agentData = crowd2->getAgent(agent);
     if (agentData) {
         result.x = agentData->nvel[0];
         result.y = agentData->nvel[1];
@@ -142,6 +139,6 @@ void UnityCrowdManager::UpdateCrowd(CrowdHandle crowd, float deltaTime) {
         return;
     }
 
-    dtCrowd* dtCrowd = static_cast<dtCrowd*>(crowd);
-    dtCrowd->update(deltaTime, nullptr);
+    dtCrowd* crowd2 = static_cast<dtCrowd*>(crowd);
+	crowd2->update(deltaTime, nullptr);
 } 

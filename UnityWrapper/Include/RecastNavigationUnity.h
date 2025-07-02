@@ -52,6 +52,13 @@ typedef struct {
     float detailSampleDist;
     float detailSampleMaxError;
     int tileSize;
+    // Additional members for heightfield creation
+    int width;
+    int height;
+    float bmin[3];
+    float bmax[3];
+    float maxSimplificationError;
+    int maxEdgeLen;
 } BuildSettings;
 
 // Query filter
@@ -81,7 +88,7 @@ typedef struct {
     float separationWeight;
     int updateFlags;
     int obstacleAvoidanceType;
-    QueryFilter queryFilter;
+    int queryFilterType;  // Changed from QueryFilter queryFilter to int queryFilterType
 } AgentParams;
 
 // Initialize RecastNavigation

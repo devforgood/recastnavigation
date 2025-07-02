@@ -41,30 +41,23 @@ std::shared_ptr<dtNavMesh> UnityNavMeshBuilder::BuildNavMesh(
     }
 
     // Mark walkable areas
-    if (!rcMarkWalkableTriangles(ctx, settings->walkableSlopeAngle,
-                                vertices, vertexCount, indices, indexCount / 3,
-                                *hf)) {
+    std::vector<unsigned char> triAreaIDs(indexCount / 3, RC_WALKABLE_AREA);
+    rcMarkWalkableTriangles(ctx, settings->walkableSlopeAngle,
+                           reinterpret_cast<const float*>(vertices), vertexCount, 
+                           indices, indexCount / 3, triAreaIDs.data());
+    
+    // Rasterize triangles
+    if (!rcRasterizeTriangles(ctx, reinterpret_cast<const float*>(vertices), vertexCount,
+                             indices, triAreaIDs.data(), indexCount / 3, *hf)) {
         rcFreeHeightField(hf);
         delete ctx;
         return nullptr;
     }
 
     // Filter walkable surfaces
-    if (!rcFilterLowHangingWalkableObstacles(ctx, settings->walkableClimb, *hf)) {
-        rcFreeHeightField(hf);
-        delete ctx;
-        return nullptr;
-    }
-    if (!rcFilterLedgeSpans(ctx, settings->walkableHeight, settings->walkableClimb, *hf)) {
-        rcFreeHeightField(hf);
-        delete ctx;
-        return nullptr;
-    }
-    if (!rcFilterWalkableLowHeightSpans(ctx, settings->walkableHeight, *hf)) {
-        rcFreeHeightField(hf);
-        delete ctx;
-        return nullptr;
-    }
+	rcFilterLowHangingWalkableObstacles(ctx, settings->walkableClimb, *hf);
+	rcFilterLedgeSpans(ctx, settings->walkableHeight, settings->walkableClimb, *hf);
+	rcFilterWalkableLowHeightSpans(ctx, settings->walkableHeight, *hf);
 
     // Build compact heightfield
     rcCompactHeightfield* chf = rcAllocCompactHeightfield();
@@ -114,7 +107,7 @@ std::shared_ptr<dtNavMesh> UnityNavMeshBuilder::BuildNavMesh(
         return nullptr;
     }
     
-    if (!rcBuildContours(ctx, *chf, settings->maxSimplificationError, settings->maxEdgeLen, *cset)) {
+    if (!rcBuildContours(ctx, *chf, settings->maxSimplificationError, settings->maxEdgeLen, *cset, RC_CONTOUR_TESS_WALL_EDGES)) {
         rcFreeContourSet(cset);
         rcFreeCompactHeightfield(chf);
         rcFreeHeightField(hf);
@@ -286,22 +279,14 @@ std::shared_ptr<dtNavMesh> UnityNavMeshBuilder::BuildNavMeshFromHeightfield(
         return nullptr;
     }
 
-    // Rasterize heightfield
+    // Rasterize heightfield using rcAddSpan
     for (int z = 0; z < height; z++) {
         for (int x = 0; x < width; x++) {
             float h = heightfield[z * width + x];
             if (h > -9999.0f) {
-                rcSpan* span = rcAllocSpan();
-                span->smin = (unsigned short)((h - originY) / cellHeight);
-                span->smax = span->smin + 1;
-                span->area = RC_WALKABLE_AREA;
-                span->next = 0;
-                
-                int index = x + z * width;
-                if (hf->spans[index]) {
-                    span->next = hf->spans[index];
-                }
-                hf->spans[index] = span;
+                unsigned short spanMin = (unsigned short)((h - originY) / cellHeight);
+                unsigned short spanMax = spanMin + 1;
+                rcAddSpan(ctx, *hf, x, z, spanMin, spanMax, RC_WALKABLE_AREA, 1);
             }
         }
     }

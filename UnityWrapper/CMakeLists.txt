@@ -15,12 +15,12 @@ if(MSVC)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 
-# Include directories
-include_directories(${CMAKE_SOURCE_DIR}/DebugUtils/Include)
-include_directories(${CMAKE_SOURCE_DIR}/Detour/Include)
-include_directories(${CMAKE_SOURCE_DIR}/DetourCrowd/Include)
-include_directories(${CMAKE_SOURCE_DIR}/DetourTileCache/Include)
-include_directories(${CMAKE_SOURCE_DIR}/Recast/Include)
+# Include directories (RecastDemo 스타일로 수정)
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/DebugUtils/Include)
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/Detour/Include)
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/DetourCrowd/Include)
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/DetourTileCache/Include)
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/Recast/Include)
 include_directories(Include)
 
 # Unity wrapper source files
@@ -36,6 +36,9 @@ add_library(RecastNavigationUnity SHARED ${UNITY_WRAPPER_SOURCES})
 
 # Define RECASTNAVIGATIONUNITY_EXPORTS for DLL export
 target_compile_definitions(RecastNavigationUnity PRIVATE RECASTNAVIGATIONUNITY_EXPORTS)
+
+# Add dependencies (RecastDemo 스타일로 수정)
+add_dependencies(RecastNavigationUnity DebugUtils Detour DetourCrowd DetourTileCache Recast)
 
 # Link with RecastNavigation libraries
 target_link_libraries(RecastNavigationUnity 

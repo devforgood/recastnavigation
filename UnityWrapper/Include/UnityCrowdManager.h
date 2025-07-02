@@ -1,11 +1,11 @@
 #pragma once
 
 #include "RecastNavigationUnity.h"
+#include "DetourCrowd.h"
 #include <memory>
 
 // Forward declarations
-struct dtNavMesh;
-struct dtCrowd;
+class dtNavMesh;
 
 class UnityCrowdManager {
 public:

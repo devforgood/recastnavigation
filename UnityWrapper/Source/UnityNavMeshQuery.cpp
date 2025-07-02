@@ -194,17 +194,19 @@ int UnityNavMeshQuery::Raycast(
     }
     
     // Perform raycast
-    float hitPoint[3];
+    float t;
     float hitNormalVec[3];
-    dtPolyRef hitPolyRef;
+    dtPolyRef path[256];
+    int pathCount;
     
-    dtStatus status = navQuery->raycast(startRef, startNearest, end, &queryFilter, 0, &hitPolyRef, hitPoint, hitNormalVec);
+    dtStatus status = navQuery->raycast(startRef, startNearest, end, &queryFilter, &t, hitNormalVec, path, &pathCount, 256);
     
     if (dtStatusSucceed(status)) {
         if (hitPos) {
-            hitPos->x = hitPoint[0];
-            hitPos->y = hitPoint[1];
-            hitPos->z = hitPoint[2];
+            // Calculate hit position based on t parameter
+            hitPos->x = startNearest[0] + (end[0] - startNearest[0]) * t;
+            hitPos->y = startNearest[1] + (end[1] - startNearest[1]) * t;
+            hitPos->z = startNearest[2] + (end[2] - startNearest[2]) * t;
         }
         if (hitNormal) {
             hitNormal->x = hitNormalVec[0];
