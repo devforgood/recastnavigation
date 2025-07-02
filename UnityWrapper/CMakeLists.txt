@@ -62,7 +62,7 @@ if(WIN32)
         POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different 
             ${CMAKE_BINARY_DIR}/Unity/$<CONFIG>/RecastNavigationUnity.dll 
-            ${CMAKE_SOURCE_DIR}/../UnityProject/Assets/Plugins/
+            ${CMAKE_SOURCE_DIR}/UnityProject/Assets/Plugins/Editor/
     )
 endif()
 
