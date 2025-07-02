@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
 
 project(RecastNavigation)
 
@@ -95,3 +95,6 @@ if (RECASTNAVIGATION_TESTS)
     enable_testing()
     add_subdirectory(Tests)
 endif ()
+
+# Add Unity wrapper project
+add_subdirectory(UnityWrapper)
