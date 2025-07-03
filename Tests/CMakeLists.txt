@@ -25,7 +25,7 @@ else()
 	target_sources(Tests PRIVATE Contrib/catch2/catch_amalgamated.cpp)
 endif()
 
-add_test(Tests Tests)
+add_test(NAME Tests COMMAND Tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # Copy UnityWrapper DLL to Tests directory for runtime
 if(WIN32)
