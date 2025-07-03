@@ -1,5 +1,6 @@
 include_directories(../Detour/Include)
 include_directories(../Recast/Include)
+include_directories(../UnityWrapper/Include)
 
 add_executable(Tests
 	Detour/Tests_Detour.cpp
@@ -8,12 +9,13 @@ add_executable(Tests
 	Recast/Tests_Recast.cpp
 	Recast/Tests_RecastFilter.cpp
 	DetourCrowd/Tests_DetourPathCorridor.cpp
+	Tests_NavMeshComparison.cpp
 )
 
 set_property(TARGET Tests PROPERTY CXX_STANDARD 17)
 
-add_dependencies(Tests Recast Detour DetourCrowd)
-target_link_libraries(Tests Recast Detour DetourCrowd)
+add_dependencies(Tests Recast Detour DetourCrowd RecastNavigationUnity)
+target_link_libraries(Tests Recast Detour DetourCrowd RecastNavigationUnity)
 
 find_package(Catch2 QUIET)
 if (Catch2_FOUND)
@@ -24,3 +26,13 @@ else()
 endif()
 
 add_test(Tests Tests)
+
+# Copy UnityWrapper DLL to Tests directory for runtime
+if(WIN32)
+    add_custom_command(TARGET Tests
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+            ${CMAKE_BINARY_DIR}/Unity/$<CONFIG>/RecastNavigationUnity.dll 
+            ${CMAKE_BINARY_DIR}/Tests/$<CONFIG>/
+    )
+endif()
