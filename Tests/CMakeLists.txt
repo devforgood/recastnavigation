@@ -10,6 +10,8 @@ add_executable(Tests
 	Recast/Tests_RecastFilter.cpp
 	DetourCrowd/Tests_DetourPathCorridor.cpp
 	Tests_NavMeshComparison.cpp
+	Tests_NavMeshSave.cpp
+	TestHelpers.cpp
 )
 
 set_property(TARGET Tests PROPERTY CXX_STANDARD 17)
